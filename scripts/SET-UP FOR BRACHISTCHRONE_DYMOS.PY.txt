@@ -1,0 +1,18 @@
+SET-UP FOR BRACHISTCHRONE_DYMOS.PY
+
+Anaconda Prompt
+conda activate dymos_env
+
+(base) C:\Users\cmodi.000>conda activate dymos_env
+
+(dymos_env) C:\Users\cmodi.000>
+
+(dymos_env) C:\Users\cmodi.000\Falcon9Sim>cd external_tools
+
+(dymos_env) C:\Users\cmodi.000\Falcon9Sim>external_tools>cd..
+
+(dymos_env) C:\Users\cmodi.000\Falcon9Sim\external_tools>cd ..
+
+(dymos_env) C:\Users\cmodi.000\Falcon9Sim>cd scripts
+
+(dymos_env) C:\Users\cmodi.000\Falcon9Sim\scripts>python brachistochrone_dymos.py

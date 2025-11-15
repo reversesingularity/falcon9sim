@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!--
+  Merlin 1D Thruster/Nozzle Definition for Falcon 9 Second Stage
+  This file defines the physical placement and characteristics of the Merlin 1D Vacuum engine
+  
+  The thruster references the engine definition and provides:
+  - Physical location on the vehicle
+  - Thrust vector direction
+  - Gimbal capabilities for attitude control
+-->
+
+<thruster_element name="merlin1d_nozzle" type="FG_ROCKET">
+  
+  <!-- Reference to the engine definition file -->
+  <engine_file>Merlin1D</engine_file>
+  
+  <!-- Physical location of the thruster relative to structural reference point -->
+  <!-- For Falcon 9 second stage, engine is at the aft end, center of vehicle -->
+  <location unit="M">
+    <x> -20.5 </x>  <!-- Aft of vehicle center -->
+    <y>   0.0 </y>  <!-- Centerline -->
+    <z>   0.0 </z>  <!-- Centerline -->
+  </location>
+  
+  <!-- Thrust vector direction in body frame -->
+  <!-- Negative X direction for forward thrust in launch vehicle -->
+  <orient unit="DEG">
+    <pitch>  0.0 </pitch>  <!-- No pitch offset -->
+    <yaw>    0.0 </yaw>    <!-- No yaw offset -->
+    <roll>   0.0 </roll>   <!-- No roll offset -->
+  </orient>
+  
+  <!-- Thrust vector pointing direction -->
+  <sense> -1 </sense>  <!-- Negative X direction (forward thrust) -->
+  
+  <!-- Fuel tank connection for propellant consumption -->
+  <tank>1</tank>  <!-- Main fuel tank (RP-1) -->
+  <tank>2</tank>  <!-- Oxidizer tank (LOX) -->
+  
+  <!-- Engine control properties -->
+  <p_factor> 1.0 </p_factor>  <!-- Proportional control factor -->
+  <i_factor> 0.0 </i_factor>  <!-- Integral control factor -->
+  <d_factor> 0.0 </d_factor>  <!-- Derivative control factor -->
+  
+  <!-- Gimbal control for thrust vector control -->
+  <gimbal>
+    <!-- Pitch gimbal (elevator control) -->
+    <pitch>
+      <control_property>fcs/elevator-cmd-norm</control_property>
+      <sense> 1.0 </sense>
+      <min_angle unit="DEG"> -5.0 </min_angle>
+      <max_angle unit="DEG">  5.0 </max_angle>
+    </pitch>
+    
+    <!-- Yaw gimbal (rudder control) -->
+    <yaw>
+      <control_property>fcs/rudder-cmd-norm</control_property>
+      <sense> 1.0 </sense>
+      <min_angle unit="DEG"> -5.0 </min_angle>
+      <max_angle unit="DEG">  5.0 </max_angle>
+    </yaw>
+  </gimbal>
+  
+</thruster_element>

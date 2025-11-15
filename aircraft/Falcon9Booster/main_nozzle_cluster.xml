@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<thruster name="main_nozzle_cluster" type="ROCKET">
+  <sense>1</sense>
+</thruster>

@@ -1,0 +1,445 @@
+name: Tests
+
+on:
+  # Trigger on push or pull request events for the master branch
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  # Run the workflow Sundays at 0400 UTC
+  schedule:
+    - cron: '0 4 * * 0'
+
+  # Allow running the workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      run_name:
+        description: 'Name of workflow run as it will appear under Actions tab (optional):'
+        type: string
+        required: false
+        default: ''
+      job_name:
+        description: 'Select a job from the matrix to run (default: all jobs)'
+        type: choice
+        options:
+          - ''
+          - 'Ubuntu Default'
+          - 'Ubuntu Default, no MPI'
+          - 'Ubuntu Default, Numpy 2.x'
+          - 'MacOS Default'
+          - 'MacOS Default, Numpy 2.x'
+          - 'Ubuntu Latest'
+          - 'Ubuntu Oldest'
+          - 'Ubuntu Default, no MPI, forced build'
+          - 'MacOS Default, no MPI, forced build'
+          - 'Ubuntu Latest, no MPI, forced build'
+        required: false
+        default: ''
+      debug_enabled:
+        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        type: boolean
+        required: false
+        default: false
+
+run-name:  ${{ inputs.run_name }}
+
+jobs:
+
+  tests:
+
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # test default version on Ubuntu
+          - NAME: Ubuntu Default
+            OS: ubuntu-latest
+            PY: '3.12'
+            NUMPY: '1.26'
+            SCIPY: '1.13'
+            MPICC: 4
+            PYOPTSPARSE: 'default'
+            # PAROPT: true
+            SNOPT: 7.7
+
+          # test default version on Ubuntu without MPI
+          - NAME: Ubuntu Default, no MPI
+            OS: ubuntu-latest
+            PY: '3.12'
+            NUMPY: '1.26'
+            SCIPY: '1.13'
+            PYOPTSPARSE: 'default'
+            SNOPT: 7.7
+
+          # test default version on Ubuntu with NumPy 2.x
+          - NAME: Ubuntu Default, Numpy 2.x
+            OS: ubuntu-latest
+            PY: '3.13'
+            NUMPY: '2'
+            SCIPY: '1.15'
+            MPICC: 4
+            PYOPTSPARSE: 'default'
+            # PAROPT: true
+            SNOPT: 7.7
+
+          # test default version on MacOS
+          - NAME: MacOS Default
+            OS: macos-13
+            PY: '3.11'
+            NUMPY: '1.26'
+            SCIPY: '1.13'
+            MPICC: 4
+            PYOPTSPARSE: 'default'
+            # PAROPT: true
+            SNOPT: 7.7
+
+          # test default version on MacOS with NumPy 2.x
+          - NAME: MacOS Default, Numpy 2.x
+            OS: macos-13
+            PY: '3.13'
+            NUMPY: '2'
+            SCIPY: '1.15'
+            MPICC: 4
+            PYOPTSPARSE: 'default'
+            # PAROPT: true
+            SNOPT: 7.7
+
+          # test default version on MacOS latest (ARM64)
+          - NAME: MacOS Default on ARM
+            OS: macos-latest
+            PY: '3.12'
+            NUMPY: '1.26'
+            SCIPY: '1.13'
+            BREW: true
+            MPICC: 4
+            PYOPTSPARSE: 'default'
+            SNOPT: 7.7
+
+          # test latest release versions
+          - NAME: Ubuntu Latest
+            OS: ubuntu-latest
+            PY: 3
+            NUMPY: 2
+            SCIPY: 1
+            MPICC: 4
+            PYOPTSPARSE: 'latest'
+            # PAROPT: true
+            SNOPT: 7.7
+
+          # test oldest supported versions
+          - NAME: Ubuntu Oldest
+            OS: ubuntu-latest
+            PY: 3.8
+            NUMPY: 1.22
+            SCIPY: 1.7
+            PYOPTSPARSE: 'v2.9.0'
+            NO_IPOPT: true
+            SNOPT: 7.2
+
+          # test default version on Ubuntu without MPI with forced build
+          - NAME: Ubuntu Default, no MPI, forced build
+            OS: ubuntu-latest
+            PY: '3.12'
+            NUMPY: '1.26'
+            SCIPY: '1.13'
+            PYOPTSPARSE: 'default'
+            SNOPT: 7.7
+            FORCE_BUILD: true
+
+          # test default version on MacOS without MPI with forced build
+          - NAME: MacOS Default, no MPI, forced build
+            OS: macos-13
+            PY: '3.11'
+            NUMPY: '1.26'
+            SCIPY: '1.13'
+            PYOPTSPARSE: 'default'
+            SNOPT: 7.7
+            FORCE_BUILD: true
+            XCODE: '14.2'
+
+          # test latest version without MPI with forced build
+          - NAME: Ubuntu Latest, no MPI, forced build
+            OS: ubuntu-latest
+            PY: 3
+            NUMPY: 2
+            SCIPY: 1
+            PYOPTSPARSE: 'latest'
+            SNOPT: 7.7
+            FORCE_BUILD: true
+
+    runs-on: ${{ matrix.OS }}
+
+    name: ${{ matrix.NAME }}
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - name: Display run details
+        run: |
+          echo "============================================================="
+          echo "Run #${GITHUB_RUN_NUMBER}"
+          echo "Run ID: ${GITHUB_RUN_ID}"
+          echo "Testing: ${GITHUB_REPOSITORY}"
+          echo "Triggered by: ${GITHUB_EVENT_NAME}"
+          echo "Initiated by: ${GITHUB_ACTOR}"
+          echo "============================================================="
+
+      - name: Exit if this job was not selected
+        if: github.event_name == 'workflow_dispatch' &&  inputs.job_name != '' &&  inputs.job_name != matrix.NAME
+        uses: actions/github-script@v7
+        with:
+          script: core.setFailed('The ${{ matrix.NAME }} job was not included in the run, exiting...');
+
+      - name: Create SSH key
+        if: matrix.SNOPT
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh/
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          sudo chmod 600 ~/.ssh/id_rsa
+          echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniconda-version: latest
+          python-version: ${{ matrix.PY }}
+          channels: conda-forge
+          channel-priority: true
+
+      - name: Install
+        run: |
+          conda install numpy=${{ matrix.NUMPY }} scipy=${{ matrix.SCIPY }} -q -y
+
+          if [[ "${{ matrix.BREW }}" ]]; then
+            brew install swig meson
+            if [[ "${{ matrix.OS }}" == "macos-latest" ]]; then
+              ln -s /opt/homebrew/bin/gfortran-13 /opt/homebrew/bin/gfortran
+            fi
+          else
+            conda install compilers cython swig -q -y
+          fi
+
+          if [[ "${{ matrix.XCODE }}" ]]; then
+            sudo xcode-select -s "/Applications/Xcode_${{ matrix.XCODE }}.app"
+          fi
+
+          echo "============================================================="
+          echo "Install build_pyoptsparse"
+          echo "============================================================="
+          python -m pip install .
+
+      - name: Install MPI
+        if: matrix.MPICC
+        run: |
+          echo "============================================================="
+          echo "Install MPI"
+          echo "============================================================="
+
+          if [[ "${{ matrix.BREW }}" ]]; then
+            brew install open-mpi mpi4py
+          else
+            conda install mpich-mpicc=${{ matrix.MPICC }} mpi4py -q -y
+          fi
+
+          echo "OMPI_MCA_rmaps_base_oversubscribe=1" >> $GITHUB_ENV
+
+      - name: Display environment before
+        run: |
+          conda info
+          conda list
+
+          echo "============================================================="
+          echo "Check installed versions of Python, Numpy and Scipy"
+          echo "============================================================="
+          python -c "import sys; assert str(sys.version).startswith(str(${{ matrix.PY }})), \
+                    f'Python version {sys.version} is not the requested version (${{ matrix.PY }})'"
+
+          python -c "import numpy; assert str(numpy.__version__).startswith(str(${{ matrix.NUMPY }})), \
+                    f'Numpy version {numpy.__version__} is not the requested version (${{ matrix.NUMPY }})'"
+
+          python -c "import scipy; assert str(scipy.__version__).startswith(str(${{ matrix.SCIPY }})), \
+                    f'Scipy version {scipy.__version__} is not the requested version (${{ matrix.SCIPY }})'"
+
+      - name: Build pyOptSparse
+        run: |
+          echo "============================================================="
+          echo "Build pyoptsparse"
+          echo "============================================================="
+
+          if [[ "${{ matrix.PYOPTSPARSE }}" == "default" ]]; then
+            BRANCH=""
+          elif [[ "${{ matrix.PYOPTSPARSE }}" == "latest" ]]; then
+            LATEST_URL=`curl -fsSLI -o /dev/null -w %{url_effective} https://github.com/mdolab/pyoptsparse/releases/latest`
+            LATEST_VER=`echo $LATEST_URL | awk '{split($0,a,"/tag/"); print a[2]}'`
+            BRANCH="-b $LATEST_VER"
+          else
+            BRANCH="-b ${{ matrix.PYOPTSPARSE }}"
+          fi
+
+          if [[ "${{ matrix.PAROPT }}" ]]; then
+            PAROPT="-a"
+          fi
+
+          if [[ "${{ matrix.SNOPT }}" == "7.7" && "${{ secrets.SNOPT_LOCATION_77 }}" ]]; then
+            echo "  > Secure copying SNOPT 7.7 over SSH"
+            mkdir SNOPT
+            scp -qr ${{ secrets.SNOPT_LOCATION_77 }} SNOPT
+            SNOPT="-s SNOPT/src"
+          elif [[ "${{ matrix.SNOPT }}" == "7.2" && "${{ secrets.SNOPT_LOCATION_72 }}" ]]; then
+            echo "  > Secure copying SNOPT 7.2 over SSH"
+            mkdir SNOPT
+            scp -qr ${{ secrets.SNOPT_LOCATION_72 }} SNOPT
+            SNOPT="-s SNOPT/source"
+          elif [[ "${{ matrix.SNOPT }}" ]]; then
+            echo "SNOPT version ${{ matrix.SNOPT }} was requested but source is not available"
+          fi
+
+          if [[ "${{ matrix.LINEAR_SOLVER }}" == "hsl"  ]]; then
+            if "${{ secrets.HSL_LOCATION }}" ]]; then
+              scp -q ${{ secrets.HSL_LOCATION }} hsl.tar.gz
+              LINEAR_SOLVER="-l hsl -t hsl.tar.gz"
+            else
+              echo "---------------------------------------------------------------------------"
+              echo "HSL was requested but source is not available, using default linear solver."
+              echo "---------------------------------------------------------------------------"
+            fi
+          elif [[ "${{ matrix.LINEAR_SOLVER }}" == "pardiso" ]]; then
+            echo "-------------------------------------------------------------------------------"
+            echo "Pardiso requires Intel compilers, which are not installed. The build will fail."
+            echo "-------------------------------------------------------------------------------"
+            LINEAR_SOLVER="-l pardiso"
+          fi
+
+          if [[ "${{ matrix.NO_IPOPT }}" ]]; then
+            NO_IPOPT="--no-ipopt"
+          fi
+
+          if [[ "${{ matrix.FORCE_BUILD }}" ]]; then
+            FORCE_BUILD="--force-build"
+          fi
+
+          echo "build_pyoptsparse -v $BRANCH $FORCE_BUILD $PAROPT $SNOPT $NO_IPOPT $LINEAR_SOLVER"
+          build_pyoptsparse -v $BRANCH $FORCE_BUILD $PAROPT $SNOPT $NO_IPOPT $LINEAR_SOLVER -d
+
+          echo "BRANCH=${BRANCH}" >> $GITHUB_ENV
+
+      - name: Display build log
+        if: failure()
+        run: |
+          for f in $(find /tmp/ -name 'meson-log.txt'); do
+            echo "============================================================="
+            echo $f
+            echo "============================================================="
+            cat $f
+          done
+          if test -d /private/var/folders; then
+            for f in $(find /private/var/folders/ -name 'meson-log.txt'); do
+              echo "============================================================="
+              echo $f
+              echo "============================================================="
+              cat $f
+            done
+            for f in $(find /private/var/folders/ -name 'compile.log'); do
+              echo "============================================================="
+              echo $f
+              echo "============================================================="
+              cat $f
+            done
+          fi
+
+      # Enable tmate debugging of manually-triggered workflows if the input option was provided
+      #
+      # To access the terminal through the web-interface:
+      #    1. Click on the web-browser link printed out in this action from the github
+      #       workflow terminal
+      #    2. Press cntrl + c in the new tab that opens up to reveal the terminal
+      #    3. To activate the conda environment run:
+      #        $ source $CONDA/etc/profile.d/conda.sh
+      #        $ conda activate test
+      - name: Setup tmate session
+        if: github.event_name == 'workflow_dispatch' && inputs.debug_enabled && inputs.job_name == matrix.NAME
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+
+      - name: Setup tmate session after failure
+        if: github.event_name == 'workflow_dispatch' && inputs.debug_enabled && inputs.job_name == matrix.NAME && failure()
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+
+      - name: Display environment after
+        run: |
+          conda info
+          conda list
+
+          echo "============================================================="
+          echo "Check installed versions of Python, Numpy and Scipy"
+          echo "============================================================="
+          python -c "import sys; assert str(sys.version).startswith(str(${{ matrix.PY }})), \
+                    f'Python version {sys.version} is not the requested version (${{ matrix.PY }})'"
+
+          python -c "import numpy; assert str(numpy.__version__).startswith(str(${{ matrix.NUMPY }})), \
+                    f'Numpy version {numpy.__version__} is not the requested version (${{ matrix.NUMPY }})'"
+
+          python -c "import scipy; assert str(scipy.__version__).startswith(str(${{ matrix.SCIPY }})), \
+                    f'Scipy version {scipy.__version__} is not the requested version (${{ matrix.SCIPY }})'"
+
+      - name: Run tests
+        run: |
+          python -m pip install testflo parameterized six
+
+          echo "============================================================="
+          echo "Run tests from pyoptsparse repository"
+          echo "============================================================="
+          unset DYLD_LIBRARY_PATH
+
+          if [[ "$BRANCH" == "" ]]; then
+            BRANCH=`python -c "from build_pyoptsparse import build_info; print(build_info['pyoptsparse']['branch'])"`
+            BRANCH="-b $BRANCH"
+          fi
+
+          echo "git clone $BRANCH https://github.com/mdolab/pyoptsparse"
+          git clone $BRANCH https://github.com/mdolab/pyoptsparse
+
+          cd pyoptsparse/test*/
+          testflo --pre_announce --timeout=120 --show_skipped .
+
+      - name: Audit dependencies
+        id: audit
+        continue-on-error: true
+        run: |
+          python -m pip install pip-audit
+
+          echo "============================================================="
+          echo "Scan environment for packages with known vulnerabilities"
+          echo "============================================================="
+          python -m pip_audit
+
+      - name: Slack audit warnings
+        if: steps.audit.outcome == 'failure' && matrix.NAME != 'Ubuntu Oldest'
+        uses: act10ns/slack@v2.0.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          status: 'warning'
+          message: |
+            pip-audit detected vulnerabilities.
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Notify slack
+        uses: act10ns/slack@v2.0.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          status: ${{ job.status }}
+        if: failure()

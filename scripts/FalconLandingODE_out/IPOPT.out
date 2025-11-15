@@ -1,0 +1,66 @@
+
+List of user-set options:
+
+                                    Name   Value                used
+               expect_infeasible_problem = yes                   yes
+                        file_print_level = 5                     yes
+                   hessian_approximation = limited-memory        yes
+                           linear_solver = mumps                 yes
+                                max_iter = 500                   yes
+                                 mu_init = 0.001                  no
+                             mu_strategy = adaptive              yes
+                      nlp_scaling_method = gradient-based        yes
+                             output_file = C:\Users\cmodi.000\Falcon9Sim\scripts\FalconLandingODE_out/IPOPT.out  yes
+                             print_level = 7                     yes
+                      print_user_options = yes                   yes
+        required_infeasibility_reduction = 0.5                    no
+                                      sb = yes                   yes
+                                     tol = 1e-06                 yes
+This is Ipopt version 3.14.12, running with linear solver MUMPS 5.2.1.
+
+Number of nonzeros in equality constraint Jacobian...:    19356
+Number of nonzeros in inequality constraint Jacobian.:        0
+Number of nonzeros in Lagrangian Hessian.............:        0
+
+Total number of variables............................:      221
+                     variables with only lower bounds:        0
+                variables with lower and upper bounds:      221
+                     variables with only upper bounds:        0
+Total number of equality constraints.................:      139
+Total number of inequality constraints...............:        0
+        inequality constraints with only lower bounds:        0
+   inequality constraints with lower and upper bounds:        0
+        inequality constraints with only upper bounds:        0
+
+iter    objective    inf_pr   inf_du lg(mu)  ||d||  lg(rg) alpha_du alpha_pr  ls
+   0 -5.0000000e-01 1.27e+00 9.72e-04   0.0 0.00e+00    -  0.00e+00 0.00e+00   0
+   1 -4.9975063e-01 1.27e+00 8.59e+09   8.7 2.87e+08    -  9.90e-01 2.96e-09h  1
+   2 -5.1784603e-01 1.21e+00 1.17e+10   6.0 1.60e+01    -  4.02e-02 4.48e-02h  1
+   3r-5.1784603e-01 1.21e+00 6.98e-01   5.9 0.00e+00    -  0.00e+00 0.00e+00R  1
+   4r-1.1062672e+00 7.04e+00 8.56e+03   5.7 2.08e+03    -  4.97e-01 1.86e-03f  1
+   5r-1.1062672e+00 7.04e+00 2.64e+02   5.4 1.05e+31    -  0.00e+00 2.06e-29R  2
+Cannot call restoration phase at point that is almost feasible for the restoration NLP (violation 0.000000e+00).
+Abort in line search due to no other fall back.
+Step computation in the restoration phase failed.
+
+Number of Iterations....: 5
+
+                                   (scaled)                 (unscaled)
+Objective...............:  -1.1062672393103978e+00   -1.1062672393103978e+00
+Dual infeasibility......:   4.4898537501896499e+02    4.4898537501896499e+02
+Constraint violation....:   7.0427380276020042e+00    7.0427380276020042e+00
+Variable bound violation:   0.0000000000000000e+00    0.0000000000000000e+00
+Complementarity.........:   4.8282995650294531e+12    4.8282995650294531e+12
+Overall NLP error.......:   1.4101670912683902e+09    4.8282995650294531e+12
+
+
+Number of objective function evaluations             = 12
+Number of objective gradient evaluations             = 4
+Number of equality constraint evaluations            = 13
+Number of inequality constraint evaluations          = 0
+Number of equality constraint Jacobian evaluations   = 9
+Number of inequality constraint Jacobian evaluations = 0
+Number of Lagrangian Hessian evaluations             = 0
+Total seconds in IPOPT                               = 0.453
+
+EXIT: Restoration Failed!

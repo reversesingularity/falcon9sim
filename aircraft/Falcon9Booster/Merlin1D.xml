@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<!--
+  Merlin 1D Engine Definition for Falcon 9
+  SpaceX Merlin 1D vacuum-optimized engine
+  
+  Specifications:
+  - Thrust (vacuum): 981 kN (220,500 lbf)
+  - Thrust (sea level): 845 kN (190,000 lbf)
+  - Specific Impulse (vacuum): 348 s
+  - Specific Impulse (sea level): 282 s
+  - Propellants: RP-1 (Rocket Propellant-1) and LOX (Liquid Oxygen)
+  - Mixture Ratio: 2.36 (O/F ratio)
+  - Chamber Pressure: 97 bar
+  - Expansion Ratio: 16:1 (vacuum nozzle)
+-->
+
+<rocket_engine name="Merlin1D">
+  <isp unit="SEC"> 348.0 </isp>
+  <builduptime> 0.1 </builduptime>
+  <shutdowntime> 0.1 </shutdowntime>
+  
+  <!-- Maximum thrust in vacuum conditions -->
+  <maxthrust unit="LBS"> 220500 </maxthrust>
+  
+  <!-- Minimum throttle capability (Merlin 1D can throttle down to ~40%) -->
+  <minthrottle> 0.40 </minthrottle>
+  
+  <!-- Propellant consumption rate at maximum thrust -->
+  <!-- Based on Isp and thrust: mdot = thrust / (Isp * g0) -->
+  <propellant_flow_rate unit="LBS/SEC"> 633.6 </propellant_flow_rate>
+  
+  <!-- Engine restart capability -->
+  <restart_capability> true </restart_capability>
+  <max_restarts> 3 </max_restarts>
+  
+  <!-- Performance varies with altitude due to atmospheric pressure -->
+  <thrust_table name="altitude_thrust_factor">
+    <independentVar lookup="row">position/h-agl-ft</independentVar>
+    <tableData>
+          0.0    0.838  <!-- Sea level thrust factor (845kN/981kN) -->
+      10000.0    0.850
+      30000.0    0.875
+      50000.0    0.900
+      80000.0    0.940
+     100000.0    0.970
+     150000.0    0.990
+     200000.0    1.000  <!-- Full vacuum thrust -->
+     300000.0    1.000
+    </tableData>
+  </thrust_table>
+  
+  <!-- ISP variation with altitude -->
+  <isp_table name="altitude_isp_factor">
+    <independentVar lookup="row">position/h-agl-ft</independentVar>
+    <tableData>
+          0.0    0.810  <!-- Sea level ISP factor (282s/348s) -->
+      10000.0    0.820
+      30000.0    0.850
+      50000.0    0.880
+      80000.0    0.920
+     100000.0    0.960
+     150000.0    0.985
+     200000.0    1.000  <!-- Full vacuum ISP -->
+     300000.0    1.000
+    </tableData>
+  </isp_table>
+  
+  <!-- Engine gimbal limits for thrust vector control -->
+  <gimbal_pitch_limit unit="DEG"> 5.0 </gimbal_pitch_limit>
+  <gimbal_yaw_limit unit="DEG"> 5.0 </gimbal_yaw_limit>
+  
+  <!-- Engine location relative to vehicle CG (structural reference frame) -->
+  <!-- This will be overridden by thruster definition -->
+  <location unit="M">
+    <x> 0.0 </x>
+    <y> 0.0 </y>
+    <z> 0.0 </z>
+  </location>
+  
+  <!-- Engine orientation (pointing down for launch vehicle) -->
+  <orientation unit="DEG">
+    <pitch> 0.0 </pitch>
+    <yaw> 0.0 </yaw>
+    <roll> 0.0 </roll>
+  </orientation>
+  
+</rocket_engine>

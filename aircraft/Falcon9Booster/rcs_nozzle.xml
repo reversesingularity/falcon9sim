@@ -1,0 +1,187 @@
+<?xml version="1.0"?>
+<!--
+  RCS Nozzle/Thruster Cluster Definition for Falcon 9 Second Stage
+  Defines multiple RCS thrusters for 6-DOF attitude control
+  
+  Configuration:
+  - 8 thrusters arranged in clusters around the vehicle
+  - 4 thrusters for pitch/yaw control (±X, ±Y directions)
+  - 4 thrusters for roll control (±Z moments)
+  - Located near the forward end for maximum moment arm
+-->
+
+<!-- Forward RCS Cluster - Pitch Control (Up) -->
+<thruster_element name="rcs_pitch_up" type="FG_ROCKET">
+  <engine_file>rcs_thruster</engine_file>
+  <location unit="M">
+    <x> 10.0 </x>   <!-- Forward location for moment arm -->
+    <y>  0.0 </y>   <!-- Centerline -->
+    <z>  1.8 </z>   <!-- Above centerline -->
+  </location>
+  <orient unit="DEG">
+    <pitch> 90.0 </pitch>  <!-- Pointing up (+Z direction) -->
+    <yaw>    0.0 </yaw>
+    <roll>   0.0 </roll>
+  </orient>
+  <sense> 1 </sense>
+  <tank>3</tank>  <!-- RCS propellant tank -->
+  
+  <!-- Control input for pitch up -->
+  <control_property>fcs/pitch-rcs-cmd-norm</control_property>
+  <clip_min> 0.0 </clip_min>  <!-- Only positive commands -->
+  <clip_max> 1.0 </clip_max>
+</thruster_element>
+
+<!-- Forward RCS Cluster - Pitch Control (Down) -->
+<thruster_element name="rcs_pitch_down" type="FG_ROCKET">
+  <engine_file>rcs_thruster</engine_file>
+  <location unit="M">
+    <x> 10.0 </x>
+    <y>  0.0 </y>
+    <z> -1.8 </z>   <!-- Below centerline -->
+  </location>
+  <orient unit="DEG">
+    <pitch> -90.0 </pitch>  <!-- Pointing down (-Z direction) -->
+    <yaw>     0.0 </yaw>
+    <roll>    0.0 </roll>
+  </orient>
+  <sense> 1 </sense>
+  <tank>3</tank>
+  
+  <!-- Control input for pitch down -->
+  <control_property>fcs/pitch-rcs-cmd-norm</control_property>
+  <clip_min> -1.0 </clip_min>
+  <clip_max>  0.0 </clip_max>  <!-- Only negative commands -->
+  <sense> -1 </sense>          <!-- Reverse sense for negative commands -->
+</thruster_element>
+
+<!-- Forward RCS Cluster - Yaw Control (Right) -->
+<thruster_element name="rcs_yaw_right" type="FG_ROCKET">
+  <engine_file>rcs_thruster</engine_file>
+  <location unit="M">
+    <x> 10.0 </x>
+    <y>  1.8 </y>   <!-- Right side -->
+    <z>  0.0 </z>
+  </location>
+  <orient unit="DEG">
+    <pitch>   0.0 </pitch>
+    <yaw>   -90.0 </yaw>  <!-- Pointing right (+Y direction) -->
+    <roll>    0.0 </roll>
+  </orient>
+  <sense> 1 </sense>
+  <tank>3</tank>
+  
+  <!-- Control input for yaw right -->
+  <control_property>fcs/yaw-rcs-cmd-norm</control_property>
+  <clip_min> 0.0 </clip_min>
+  <clip_max> 1.0 </clip_max>
+</thruster_element>
+
+<!-- Forward RCS Cluster - Yaw Control (Left) -->
+<thruster_element name="rcs_yaw_left" type="FG_ROCKET">
+  <engine_file>rcs_thruster</engine_file>
+  <location unit="M">
+    <x> 10.0 </x>
+    <y> -1.8 </y>   <!-- Left side -->
+    <z>  0.0 </z>
+  </location>
+  <orient unit="DEG">
+    <pitch>  0.0 </pitch>
+    <yaw>   90.0 </yaw>  <!-- Pointing left (-Y direction) -->
+    <roll>   0.0 </roll>
+  </orient>
+  <sense> 1 </sense>
+  <tank>3</tank>
+  
+  <!-- Control input for yaw left -->
+  <control_property>fcs/yaw-rcs-cmd-norm</control_property>
+  <clip_min> -1.0 </clip_min>
+  <clip_max>  0.0 </clip_max>
+  <sense> -1 </sense>
+</thruster_element>
+
+<!-- Aft RCS Cluster - Roll Control (Clockwise when viewed from behind) -->
+<thruster_element name="rcs_roll_cw_1" type="FG_ROCKET">
+  <engine_file>rcs_thruster</engine_file>
+  <location unit="M">
+    <x> -15.0 </x>  <!-- Aft location -->
+    <y>   1.3 </y>  <!-- Right side, closer to centerline -->
+    <z>   1.3 </z>  <!-- Above centerline -->
+  </location>
+  <orient unit="DEG">
+    <pitch> -45.0 </pitch>  <!-- 45 degree angle for roll moment -->
+    <yaw>   -45.0 </yaw>
+    <roll>    0.0 </roll>
+  </orient>
+  <sense> 1 </sense>
+  <tank>3</tank>
+  
+  <!-- Control input for roll clockwise -->
+  <control_property>fcs/roll-rcs-cmd-norm</control_property>
+  <clip_min> 0.0 </clip_min>
+  <clip_max> 1.0 </clip_max>
+</thruster_element>
+
+<thruster_element name="rcs_roll_cw_2" type="FG_ROCKET">
+  <engine_file>rcs_thruster</engine_file>
+  <location unit="M">
+    <x> -15.0 </x>
+    <y>  -1.3 </y>  <!-- Left side -->
+    <z>  -1.3 </z>  <!-- Below centerline -->
+  </location>
+  <orient unit="DEG">
+    <pitch>  45.0 </pitch>
+    <yaw>    45.0 </yaw>
+    <roll>    0.0 </roll>
+  </orient>
+  <sense> 1 </sense>
+  <tank>3</tank>
+  
+  <control_property>fcs/roll-rcs-cmd-norm</control_property>
+  <clip_min> 0.0 </clip_min>
+  <clip_max> 1.0 </clip_max>
+</thruster_element>
+
+<!-- Aft RCS Cluster - Roll Control (Counter-clockwise) -->
+<thruster_element name="rcs_roll_ccw_1" type="FG_ROCKET">
+  <engine_file>rcs_thruster</engine_file>
+  <location unit="M">
+    <x> -15.0 </x>
+    <y>  -1.3 </y>  <!-- Left side -->
+    <z>   1.3 </z>  <!-- Above centerline -->
+  </location>
+  <orient unit="DEG">
+    <pitch> -45.0 </pitch>
+    <yaw>    45.0 </yaw>
+    <roll>    0.0 </roll>
+  </orient>
+  <sense> 1 </sense>
+  <tank>3</tank>
+  
+  <!-- Control input for roll counter-clockwise -->
+  <control_property>fcs/roll-rcs-cmd-norm</control_property>
+  <clip_min> -1.0 </clip_min>
+  <clip_max>  0.0 </clip_max>
+  <sense> -1 </sense>
+</thruster_element>
+
+<thruster_element name="rcs_roll_ccw_2" type="FG_ROCKET">
+  <engine_file>rcs_thruster</engine_file>
+  <location unit="M">
+    <x> -15.0 </x>
+    <y>   1.3 </y>  <!-- Right side -->
+    <z>  -1.3 </z>  <!-- Below centerline -->
+  </location>
+  <orient unit="DEG">
+    <pitch>  45.0 </pitch>
+    <yaw>   -45.0 </yaw>
+    <roll>    0.0 </roll>
+  </orient>
+  <sense> 1 </sense>
+  <tank>3</tank>
+  
+  <control_property>fcs/roll-rcs-cmd-norm</control_property>
+  <clip_min> -1.0 </clip_min>
+  <clip_max>  0.0 </clip_max>
+  <sense> -1 </sense>
+</thruster_element>

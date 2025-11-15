@@ -1,0 +1,424 @@
+import numpy as np
+import openmdao.api as om
+import dymos as dm
+import matplotlib.pyplot as plt
+import os
+
+# --- 1. Define the ODE Component for Falcon 9 Landing ---
+class FalconLandingODE(om.ExplicitComponent):
+    """
+    ODE for a simplified Falcon 9 booster atmospheric re-entry and powered landing.
+    This is a placeholder and would need to be populated with accurate
+    aerodynamic and propulsion models for a real simulation.
+    """
+    def initialize(self):
+        self.options.declare('num_nodes', types=int)
+        self.options.declare('g_approx', default=9.80665, desc='Approximate gravitational acceleration (m/s**2)')
+        self.options.declare('Isp', default=300.0, desc='Specific impulse of Merlin 1D engine (s)')
+        self.options.declare('max_thrust_vac', default=845e3, desc='Max vacuum thrust of one Merlin 1D (N)')
+        self.options.declare('num_engines', default=1, desc='Number of engines for landing burn (e.g., 1 or 3)')
+        self.options.declare('area_ref', default=10.6, desc='Reference area for aerodynamics (m^2, approx for F9)')
+
+    def setup(self):
+        nn = self.options['num_nodes']
+        ar = np.arange(nn)
+
+        # Inputs
+        self.add_input('h', val=np.zeros(nn), desc='altitude', units='m')
+        self.add_input('vx', val=np.zeros(nn), desc='horizontal velocity', units='m/s')
+        self.add_input('vh', val=np.zeros(nn), desc='vertical velocity', units='m/s')
+        self.add_input('mass', val=np.zeros(nn), desc='vehicle mass', units='kg')
+        
+        # Controls
+        self.add_input('throttle', val=np.zeros(nn), desc='throttle level (0 to 1)', units=None) 
+        self.add_input('gimbal_alpha', val=np.zeros(nn), desc='gimbal angle alpha (pitch)', units='rad')
+        self.add_input('gimbal_beta', val=np.zeros(nn), desc='gimbal angle beta (yaw)', units='rad')
+
+        # Outputs (state rates)
+        self.add_output('x_dot', val=np.zeros(nn), desc='rate of change of downrange position', units='m/s')
+        self.add_output('h_dot', val=np.zeros(nn), desc='rate of change of altitude', units='m/s')
+        self.add_output('vx_dot', val=np.zeros(nn), desc='rate of change of horizontal velocity', units='m/s**2')
+        self.add_output('vh_dot', val=np.zeros(nn), desc='rate of change of vertical velocity', units='m/s**2')
+        self.add_output('mass_dot', val=np.zeros(nn), desc='rate of change of mass (fuel consumption)', units='kg/s')
+
+        # Optional outputs for path constraints or analysis
+        self.add_output('dynamic_pressure', val=np.zeros(nn), desc='Dynamic pressure q', units='Pa')
+        self.add_output('g_load_axial', val=np.zeros(nn), desc='Axial G-load', units='m/s**2')
+
+        # Partial derivatives
+        self.declare_partials(of='x_dot', wrt='vx', rows=ar, cols=ar)
+        self.declare_partials(of='h_dot', wrt='vh', rows=ar, cols=ar)
+
+        self.declare_partials(of='vx_dot', wrt='h', rows=ar, cols=ar)
+        self.declare_partials(of='vx_dot', wrt='vx', rows=ar, cols=ar)
+        self.declare_partials(of='vx_dot', wrt='vh', rows=ar, cols=ar)
+        self.declare_partials(of='vx_dot', wrt='mass', rows=ar, cols=ar)
+        self.declare_partials(of='vx_dot', wrt='throttle', rows=ar, cols=ar)
+        self.declare_partials(of='vx_dot', wrt='gimbal_alpha', rows=ar, cols=ar)
+        self.declare_partials(of='vx_dot', wrt='gimbal_beta', rows=ar, cols=ar)
+
+        self.declare_partials(of='vh_dot', wrt='h', rows=ar, cols=ar)
+        self.declare_partials(of='vh_dot', wrt='vx', rows=ar, cols=ar)
+        self.declare_partials(of='vh_dot', wrt='vh', rows=ar, cols=ar)
+        self.declare_partials(of='vh_dot', wrt='mass', rows=ar, cols=ar)
+        self.declare_partials(of='vh_dot', wrt='throttle', rows=ar, cols=ar)
+        self.declare_partials(of='vh_dot', wrt='gimbal_alpha', rows=ar, cols=ar)
+        self.declare_partials(of='vh_dot', wrt='gimbal_beta', rows=ar, cols=ar)
+        
+        self.declare_partials(of='mass_dot', wrt='throttle', rows=ar, cols=ar)
+
+        self.declare_partials(of='dynamic_pressure', wrt='h', rows=ar, cols=ar)
+        self.declare_partials(of='dynamic_pressure', wrt='vx', rows=ar, cols=ar)
+        self.declare_partials(of='dynamic_pressure', wrt='vh', rows=ar, cols=ar)
+
+        self.declare_partials(of='g_load_axial', wrt='h', rows=ar, cols=ar)
+        self.declare_partials(of='g_load_axial', wrt='vx', rows=ar, cols=ar)
+        self.declare_partials(of='g_load_axial', wrt='vh', rows=ar, cols=ar)
+        self.declare_partials(of='g_load_axial', wrt='mass', rows=ar, cols=ar)
+        self.declare_partials(of='g_load_axial', wrt='throttle', rows=ar, cols=ar)
+        self.declare_partials(of='g_load_axial', wrt='gimbal_alpha', rows=ar, cols=ar)
+        self.declare_partials(of='g_load_axial', wrt='gimbal_beta', rows=ar, cols=ar)
+
+    def compute(self, inputs, outputs):
+        h = inputs['h']
+        vx = inputs['vx']
+        vh = inputs['vh']
+        mass = inputs['mass']
+        throttle = inputs['throttle']
+        gimbal_alpha = inputs['gimbal_alpha'] 
+
+        g_approx = self.options['g_approx'] 
+        Isp = self.options['Isp']
+        max_thrust_per_engine_vac = self.options['max_thrust_vac']
+        num_engines = self.options['num_engines']
+        area_ref = self.options['area_ref']
+
+        # Simplified atmospheric model
+        rho = 1.225 * np.ones_like(h) 
+        idx_tropo = (h >= 0) & (h <= 11000)
+        if np.any(idx_tropo):
+            rho[idx_tropo] = 1.225 * np.maximum(0.001, (1 - h[idx_tropo]/44330.0)**4.256)
+        
+        idx_strato = h > 11000
+        if np.any(idx_strato):
+            rho[idx_strato] = 0.3639 * np.exp(-(h[idx_strato] - 11000.0)/6300.0)
+        
+        rho[h < 0] = 1.225
+
+        v_total = np.sqrt(vx**2 + vh**2 + 1e-9)
+        Cd = 0.5
+
+        thrust_mag = throttle * num_engines * max_thrust_per_engine_vac
+        thrust_x = thrust_mag * np.sin(gimbal_alpha) 
+        thrust_h = thrust_mag * np.cos(gimbal_alpha) 
+
+        drag_force_mag = 0.5 * rho * v_total**2 * Cd * area_ref
+        drag_x = np.zeros_like(vx)
+        drag_h = np.zeros_like(vh)
+        
+        non_zero_v_total_mask = v_total > 1e-9 
+        if np.any(non_zero_v_total_mask):
+            drag_x[non_zero_v_total_mask] = -drag_force_mag[non_zero_v_total_mask] * (vx[non_zero_v_total_mask] / v_total[non_zero_v_total_mask])
+            drag_h[non_zero_v_total_mask] = -drag_force_mag[non_zero_v_total_mask] * (vh[non_zero_v_total_mask] / v_total[non_zero_v_total_mask])
+        
+        lift_x = 0.0
+        lift_h = 0.0
+        gravity_force = mass * g_approx 
+
+        sum_forces_x = thrust_x + drag_x + lift_x
+        sum_forces_h = thrust_h + drag_h + lift_h - gravity_force 
+
+        outputs['x_dot'] = vx
+        outputs['h_dot'] = vh 
+        outputs['vx_dot'] = sum_forces_x / mass
+        outputs['vh_dot'] = sum_forces_h / mass
+        outputs['mass_dot'] = -thrust_mag / (Isp * 9.80665)
+
+        outputs['dynamic_pressure'] = 0.5 * rho * v_total**2
+        outputs['g_load_axial'] = sum_forces_h / mass
+
+    def compute_partials(self, inputs, partials):
+        nn = self.options['num_nodes']
+        h = inputs['h']
+        vx = inputs['vx']
+        vh = inputs['vh']
+        mass = inputs['mass']
+        throttle = inputs['throttle']
+        gimbal_alpha = inputs['gimbal_alpha']
+
+        g_approx = self.options['g_approx']
+        Isp = self.options['Isp']
+        max_thrust_per_engine_vac = self.options['max_thrust_vac']
+        num_engines = self.options['num_engines']
+        area_ref = self.options['area_ref']
+        
+        rho_for_partials = np.zeros(nn) 
+        d_rho_d_h = np.zeros(nn)
+
+        idx_tropo = (h >= 0) & (h <= 11000) 
+        if np.any(idx_tropo):
+            h_at_idx_tropo = h[idx_tropo] 
+            term_tropo_values_at_idx_tropo = 1.0 - h_at_idx_tropo / 44330.0 
+            safe_term_tropo_values_at_idx_tropo = np.maximum(1e-9, term_tropo_values_at_idx_tropo) 
+            
+            rho_for_partials[idx_tropo] = 1.225 * safe_term_tropo_values_at_idx_tropo**4.256
+            d_rho_d_h[idx_tropo] = 1.225 * 4.256 * (safe_term_tropo_values_at_idx_tropo**3.256) * (-1.0/44330.0)
+            
+            clamped_condition_for_tropo_subset = (term_tropo_values_at_idx_tropo <= 1e-9) 
+            clamped_tropo_mask_global = np.zeros(nn, dtype=bool)
+            clamped_tropo_mask_global[idx_tropo] = clamped_condition_for_tropo_subset
+            
+            if np.any(clamped_tropo_mask_global):
+                 d_rho_d_h[clamped_tropo_mask_global] = 0.0
+
+        idx_strato = h > 11000
+        if np.any(idx_strato):
+            h_at_idx_strato = h[idx_strato]
+            exp_term_strato = np.exp(-(h_at_idx_strato - 11000.0)/6300.0)
+            rho_for_partials[idx_strato] = 0.3639 * exp_term_strato 
+            d_rho_d_h[idx_strato] = 0.3639 * exp_term_strato * (-1.0/6300.0)
+
+        idx_below_zero = h < 0
+        if np.any(idx_below_zero):
+            rho_for_partials[idx_below_zero] = 1.225 
+            d_rho_d_h[idx_below_zero] = 0.0
+        
+        v_total = np.sqrt(vx**2 + vh**2 + 1e-9) 
+        Cd = 0.5 
+
+        thrust_mag = throttle * num_engines * max_thrust_per_engine_vac
+        sin_ga = np.sin(gimbal_alpha)
+        cos_ga = np.cos(gimbal_alpha)
+        
+        partials['x_dot', 'vx'] = 1.0
+        partials['h_dot', 'vh'] = 1.0
+        partials['mass_dot', 'throttle'] = -num_engines * max_thrust_per_engine_vac / (Isp * 9.80665)
+
+        safe_v_total = np.maximum(1e-9, v_total)
+
+        partials['vx_dot', 'h'] = (-0.5 * d_rho_d_h * vx * safe_v_total * Cd * area_ref) / mass
+        d_drag_x_d_vx = -0.5 * rho_for_partials * Cd * area_ref * ( (vx**2 / safe_v_total) + safe_v_total )
+        partials['vx_dot', 'vx'] = d_drag_x_d_vx / mass
+        d_drag_x_d_vh = -0.5 * rho_for_partials * Cd * area_ref * (vx * vh / safe_v_total)
+        partials['vx_dot', 'vh'] = d_drag_x_d_vh / mass
+        partials['vx_dot', 'mass'] = -(thrust_mag * sin_ga -0.5 * rho_for_partials * vx * safe_v_total * Cd * area_ref) / mass**2
+        partials['vx_dot', 'throttle'] = (num_engines * max_thrust_per_engine_vac * sin_ga) / mass
+        partials['vx_dot', 'gimbal_alpha'] = (thrust_mag * cos_ga) / mass
+        partials['vx_dot', 'gimbal_beta'] = 0.0 
+
+        partials['vh_dot', 'h'] = (-0.5 * d_rho_d_h * vh * safe_v_total * Cd * area_ref) / mass
+        d_drag_h_d_vx = -0.5 * rho_for_partials * Cd * area_ref * (vh * vx / safe_v_total)
+        partials['vh_dot', 'vx'] = d_drag_h_d_vx / mass
+        d_drag_h_d_vh = -0.5 * rho_for_partials * Cd * area_ref * ( (vh**2 / safe_v_total) + safe_v_total )
+        partials['vh_dot', 'vh'] = d_drag_h_d_vh / mass
+        
+        partials['vh_dot', 'mass'] = -(thrust_mag * cos_ga - 0.5 * rho_for_partials * vh * safe_v_total * Cd * area_ref - mass * g_approx) / mass**2
+        
+        partials['vh_dot', 'throttle'] = (num_engines * max_thrust_per_engine_vac * cos_ga) / mass
+        partials['vh_dot', 'gimbal_alpha'] = (-thrust_mag * sin_ga) / mass
+        partials['vh_dot', 'gimbal_beta'] = 0.0
+
+        partials['dynamic_pressure', 'h'] = 0.5 * d_rho_d_h * safe_v_total**2
+        partials['dynamic_pressure', 'vx'] = rho_for_partials * vx 
+        partials['dynamic_pressure', 'vh'] = rho_for_partials * vh 
+        
+        partials['g_load_axial', 'h'] = partials['vh_dot', 'h']
+        partials['g_load_axial', 'vx'] = partials['vh_dot', 'vx']
+        partials['g_load_axial', 'vh'] = partials['vh_dot', 'vh']
+        partials['g_load_axial', 'mass'] = partials['vh_dot', 'mass']
+        partials['g_load_axial', 'throttle'] = partials['vh_dot', 'throttle']
+        partials['g_load_axial', 'gimbal_alpha'] = partials['vh_dot', 'gimbal_alpha']
+        partials['g_load_axial', 'gimbal_beta'] = partials['vh_dot', 'gimbal_beta']
+
+# --- Main script execution ---
+if __name__ == '__main__':
+    # --- 2. Instantiate OpenMDAO Problem ---
+    p = om.Problem(model=om.Group())
+
+    # --- 3. Configure the Optimizer (Driver) ---
+    try:
+        p.driver = om.pyOptSparseDriver()
+        p.driver.options['optimizer'] = 'IPOPT'
+        p.driver.opt_settings['max_iter'] = 500 
+        p.driver.opt_settings['tol'] = 1e-6    
+        p.driver.opt_settings['mu_init'] = 1e-3 
+        p.driver.opt_settings['print_level'] = 7 
+        p.driver.opt_settings['mu_strategy'] = 'adaptive' 
+        p.driver.opt_settings['nlp_scaling_method'] = 'gradient-based'
+        p.driver.opt_settings['expect_infeasible_problem'] = 'yes'
+        p.driver.opt_settings['required_infeasibility_reduction'] = 0.5
+        p.driver.declare_coloring()
+        print("--- Using pyOptSparseDriver with IPOPT for Falcon Landing (default linear solver, additional tuning) ---")
+    except ImportError:
+        print("--- pyOptSparseDriver with IPOPT not available. Falling back to ScipyOptimizeDriver with SLSQP ---")
+        p.driver = om.ScipyOptimizeDriver()
+        p.driver.options['optimizer'] = 'SLSQP'
+        p.driver.options['tol'] = 1e-6
+        p.driver.options['maxiter'] = 500
+        p.driver.options['disp'] = True
+
+    # --- 4. Instantiate Dymos Trajectory and Phase ---
+    traj = dm.Trajectory()
+    p.model.add_subsystem('traj', traj)
+
+    tx = dm.GaussLobatto(num_segments=20, order=3, compressed=True)
+    ode_init_kwargs = {
+        'g_approx': 9.80665, 'Isp': 300.0, 'max_thrust_vac': 800e3, 
+        'num_engines': 1, 'area_ref': 10.6 
+    }
+    phase = dm.Phase(ode_class=FalconLandingODE, transcription=tx, ode_init_kwargs=ode_init_kwargs)
+    traj.add_phase('phase0', phase)
+
+    # --- 5. Configure Phase ---
+    phase.set_time_options(fix_initial=True, duration_bounds=(30.0, 500.0), units='s', duration_ref=100.0)
+
+    phase.add_state('x', rate_source='x_dot', units='m', fix_initial=True, fix_final=False, ref=200000.0, defect_ref=20000.0)
+    phase.add_state('h', rate_source='h_dot', units='m', fix_initial=True, fix_final=True, lower=0.0, upper=100000.0, ref=80000.0, defect_ref=8000.0)
+    phase.add_state('vx', rate_source='vx_dot', units='m/s', fix_initial=True, fix_final=True, lower=-100.0, upper=8000.0, ref=6000.0, defect_ref=600.0)
+    phase.add_state('vh', rate_source='vh_dot', units='m/s', fix_initial=True, fix_final=True, lower=-2000.0, upper=100.0, ref=1500.0, defect_ref=150.0)
+    phase.add_state('mass', rate_source='mass_dot', units='kg', fix_initial=True, fix_final=False, lower=20000.0, upper=100000.0, ref=70000.0, defect_ref=7000.0)
+
+    phase.add_control('throttle', units=None, lower=0.0, upper=1.0, continuity=True, rate_continuity=False, targets=['throttle'], ref=1.0)
+    phase.add_control('gimbal_alpha', units='rad', lower=-0.2, upper=0.2, continuity=True, rate_continuity=True, targets=['gimbal_alpha'], ref=0.2)
+    phase.add_control('gimbal_beta', units='rad', lower=-0.2, upper=0.2, continuity=True, rate_continuity=True, targets=['gimbal_beta'], ref=0.2)
+
+    phase.add_objective('mass', loc='final', scaler=-1.0/70000.0)
+    phase.add_boundary_constraint('x', loc='final', equals=0, units='m', scaler=1.0/200000.0)
+
+    # --- 6. Setup the OpenMDAO Problem ---
+    p.setup(check=True, force_alloc_complex=True) 
+
+    # --- 7. Set Initial Values and Guesses ---
+    p.set_val('traj.phase0.t_initial', 0.0)
+    p.set_val('traj.phase0.t_duration', 150.0) 
+
+    h_initial, vx_initial, vh_initial, mass_initial, x_initial = 80000.0, 6000.0, -1500.0, 70000.0, -200000.0
+    h_final, vx_final, vh_final, x_final = 0.0, 0.0, -1.0, 0.0
+
+    p.set_val('traj.phase0.states:x', phase.interp(ys=[x_initial, x_final], nodes='state_input'))
+    p.set_val('traj.phase0.states:h', phase.interp(ys=[h_initial, h_final], nodes='state_input'))
+    p.set_val('traj.phase0.states:vx', phase.interp(ys=[vx_initial, vx_final], nodes='state_input'))
+    p.set_val('traj.phase0.states:vh', phase.interp(ys=[vh_initial, vh_final], nodes='state_input'))
+    p.set_val('traj.phase0.states:mass', phase.interp(ys=[mass_initial, mass_initial*0.5], nodes='state_input')) 
+
+    p.set_val('traj.phase0.controls:throttle', phase.interp(ys=[0.1, 0.8], nodes='control_input')) 
+    p.set_val('traj.phase0.controls:gimbal_alpha', phase.interp(ys=[0.0, 0.0], nodes='control_input'))
+    p.set_val('traj.phase0.controls:gimbal_beta', phase.interp(ys=[0.0, 0.0], nodes='control_input'))
+    
+    # --- 8. Run the Optimization ---
+    output_dir = 'falcon_landing_dymos_out'
+    if not os.path.exists(output_dir): os.makedirs(output_dir)
+    solution_file = os.path.join(output_dir, 'falcon_landing_solution.db')
+    simulation_file = os.path.join(output_dir, 'falcon_landing_simulation.db')
+    
+    print("--- Starting Falcon Landing Optimization ---")
+    print("--- This is a complex problem and may take time or fail to converge without careful tuning and good initial guesses. ---")
+    
+    dm.run_problem(p, simulate=True, solution_record_file=solution_file,
+                   simulation_record_file=simulation_file,
+                   make_plots=True, plot_dir=output_dir,
+                   simulate_kwargs={'times_per_seg': 20})
+
+    # --- 9. Retrieve and Print Key Results ---
+    try:
+        final_time_opt = p.get_val('traj.phase0.timeseries.time')[-1]
+        final_mass_opt = p.get_val('traj.phase0.timeseries.mass')[-1]
+        final_vh_opt = p.get_val('traj.phase0.timeseries.vh')[-1]
+        final_time_scalar = final_time_opt.item()
+        final_mass_scalar = final_mass_opt.item()
+        final_vh_scalar = final_vh_opt.item()
+        print(f"\nOptimal duration: {final_time_scalar:.4f} s")
+        print(f"Final mass: {final_mass_scalar:.2f} kg")
+        print(f"Final vertical velocity (Vvert): {final_vh_scalar:.4f} m/s")
+    except Exception as e:
+        print(f"Could not retrieve final results: {e}")
+
+    # --- 10. Custom Plotting with 3D Trajectory and Additional 2D Plot ---
+    try:
+        time_sol = p.get_val('traj.phase0.timeseries.time')
+        x_sol = p.get_val('traj.phase0.timeseries.x')
+        h_sol = p.get_val('traj.phase0.timeseries.h')
+        vx_sol = p.get_val('traj.phase0.timeseries.vx')
+        vh_sol = p.get_val('traj.phase0.timeseries.vh')
+        mass_sol = p.get_val('traj.phase0.timeseries.mass')
+        throttle_sol = p.get_val('traj.phase0.timeseries.throttle')
+        gimbal_alpha_sol_deg = np.degrees(p.get_val('traj.phase0.timeseries.gimbal_alpha'))
+
+        # Create figure with mixed 2D and 3D subplots (4x2 grid for 8 subplots)
+        fig = plt.figure(figsize=(15, 18))
+
+        # Plot 1: 3D Trajectory Path
+        ax1 = fig.add_subplot(421, projection='3d')
+        ax1.plot(x_sol/1000, np.zeros_like(x_sol), h_sol/1000, 'bo-', label='Optimized Trajectory')
+        ax1.set_xlabel('Downrange Position, x (km)')
+        ax1.set_ylabel('Cross-range Position, y (km)')
+        ax1.set_zlabel('Altitude, h (km)')
+        ax1.set_title('3D Trajectory Path')
+        ax1.legend()
+        ax1.view_init(elev=20, azim=30)  # Adjust view angle for better visualization
+
+        # Plot 2: Altitude vs Time
+        ax2 = fig.add_subplot(422)
+        ax2.plot(time_sol, h_sol/1000, 'ro-', label='Altitude')
+        ax2.set_xlabel('Time (s)')
+        ax2.set_ylabel('Altitude, h (km)')
+        ax2.set_title('Altitude Profile')
+        ax2.legend()
+        ax2.grid(True)
+
+        # Plot 3: Velocities vs Time
+        ax3 = fig.add_subplot(423)
+        ax3.plot(time_sol, vx_sol, 'go-', label='$v_x$ (Horizontal Velocity)')
+        ax3.plot(time_sol, vh_sol, 'mo-', label='$v_h$ (Vertical Velocity)')
+        ax3.set_xlabel('Time (s)')
+        ax3.set_ylabel('Velocity (m/s)')
+        ax3.set_title('Velocity Profiles')
+        ax3.legend()
+        ax3.grid(True)
+
+        # Plot 4: Mass vs Time
+        ax4 = fig.add_subplot(424)
+        ax4.plot(time_sol, mass_sol/1000, 'co-', label='Mass')
+        ax4.set_xlabel('Time (s)')
+        ax4.set_ylabel('Mass (1000s of kg)')
+        ax4.set_title('Mass Profile (Fuel Consumption)')
+        ax4.legend()
+        ax4.grid(True)
+
+        # Plot 5: Throttle vs Time
+        ax5 = fig.add_subplot(425)
+        ax5.plot(time_sol, throttle_sol, 'yo-', label='Throttle (0-1)')
+        ax5.set_xlabel('Time (s)')
+        ax5.set_ylabel('Throttle')
+        ax5.set_title('Throttle Control Profile')
+        ax5.legend()
+        ax5.grid(True)
+        ax5.set_ylim([-0.1, 1.1])
+
+        # Plot 6: Gimbal Angle vs Time
+        ax6 = fig.add_subplot(426)
+        ax6.plot(time_sol, gimbal_alpha_sol_deg, 'ko-', label='Gimbal $\\alpha$ (deg)')
+        ax6.set_xlabel('Time (s)')
+        ax6.set_ylabel('Gimbal Angle (degrees)')
+        ax6.set_title('Gimbal Control Profile (Pitch)')
+        ax6.legend()
+        ax6.grid(True)
+
+        # Plot 7: Vertical Velocity vs Altitude
+        ax7 = fig.add_subplot(427)
+        ax7.plot(h_sol/1000, vh_sol, 'mo-', label='Vertical Velocity')
+        ax7.set_xlabel('Altitude, h (km)')
+        ax7.set_ylabel('Vertical Velocity, v_h (m/s)')
+        ax7.set_title('Vertical Velocity vs. Altitude')
+        ax7.legend()
+        ax7.grid(True)
+        ax7.set_ylim(-2000, 100)  # Adjust based on actual data range
+
+        # Save and display the figure
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plot_filename = os.path.join(output_dir, 'falcon_landing_custom_plots_3D.png')
+        plt.savefig(plot_filename)
+        print(f"Custom plots saved to {plot_filename}")
+        plt.show()
+    except Exception as e:
+        print(f"Could not generate custom plots: {e}")
