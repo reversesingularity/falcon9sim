@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Falcon 9 Booster - Launch to Landing Simulation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🚀 Falcon 9 Booster Simulation</h1>
+            <p>Launch → Orbital Re-entry → Soft Landing</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- 3D Visualization -->
+            <div class="visualization-panel">
+                <canvas id="canvas3d"></canvas>
+                <div class="phase-indicator" id="phaseIndicator">
+                    <span class="phase-text">INITIALIZING</span>
+                </div>
+            </div>
+
+            <!-- Telemetry Panel -->
+            <div class="telemetry-panel">
+                <h2>📊 Telemetry Data</h2>
+                
+                <div class="telemetry-grid">
+                    <!-- Time -->
+                    <div class="telemetry-item">
+                        <label>Mission Time</label>
+                        <span id="missionTime" class="value">T+00:00</span>
+                    </div>
+
+                    <!-- Altitude -->
+                    <div class="telemetry-item highlight">
+                        <label>Altitude</label>
+                        <span id="altitude" class="value">0 km</span>
+                    </div>
+
+                    <!-- Velocity -->
+                    <div class="telemetry-item highlight">
+                        <label>Velocity</label>
+                        <span id="velocity" class="value">0 m/s</span>
+                    </div>
+
+                    <!-- Vertical Speed -->
+                    <div class="telemetry-item">
+                        <label>Vertical Speed</label>
+                        <span id="verticalSpeed" class="value">0 m/s</span>
+                    </div>
+
+                    <!-- Mass -->
+                    <div class="telemetry-item">
+                        <label>Mass</label>
+                        <span id="mass" class="value">0 kg</span>
+                    </div>
+
+                    <!-- Fuel -->
+                    <div class="telemetry-item">
+                        <label>Fuel Remaining</label>
+                        <span id="fuel" class="value">0%</span>
+                        <div class="fuel-bar">
+                            <div id="fuelBar" class="fuel-fill"></div>
+                        </div>
+                    </div>
+
+                    <!-- Thrust -->
+                    <div class="telemetry-item">
+                        <label>Thrust</label>
+                        <span id="thrust" class="value">0 kN</span>
+                    </div>
+
+                    <!-- Throttle -->
+                    <div class="telemetry-item">
+                        <label>Throttle</label>
+                        <span id="throttle" class="value">0%</span>
+                    </div>
+
+                    <!-- Pitch -->
+                    <div class="telemetry-item">
+                        <label>Pitch</label>
+                        <span id="pitch" class="value">0°</span>
+                    </div>
+
+                    <!-- Roll -->
+                    <div class="telemetry-item">
+                        <label>Roll</label>
+                        <span id="roll" class="value">0°</span>
+                    </div>
+
+                    <!-- Yaw -->
+                    <div class="telemetry-item">
+                        <label>Yaw</label>
+                        <span id="yaw" class="value">0°</span>
+                    </div>
+
+                    <!-- G-Force -->
+                    <div class="telemetry-item">
+                        <label>G-Force</label>
+                        <span id="gforce" class="value">0.0g</span>
+                    </div>
+
+                    <!-- Distance to Target -->
+                    <div class="telemetry-item">
+                        <label>Distance to Target</label>
+                        <span id="distance" class="value">0 km</span>
+                    </div>
+
+                    <!-- Dynamic Pressure -->
+                    <div class="telemetry-item">
+                        <label>Dynamic Pressure</label>
+                        <span id="dynPressure" class="value">0 kPa</span>
+                    </div>
+                </div>
+
+                <!-- Mission Events -->
+                <div class="events-log">
+                    <h3>Mission Events</h3>
+                    <div id="eventsLog" class="events-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Panel -->
+        <div class="controls-panel">
+            <div class="control-group">
+                <button id="playPauseBtn" class="btn btn-primary">▶ Play</button>
+                <button id="resetBtn" class="btn btn-secondary">↻ Reset</button>
+            </div>
+
+            <div class="control-group">
+                <label for="speedControl">Simulation Speed:</label>
+                <input type="range" id="speedControl" min="0.1" max="10" step="0.1" value="1">
+                <span id="speedValue">1.0x</span>
+            </div>
+
+            <div class="control-group">
+                <label for="phaseSelect">Jump to Phase:</label>
+                <select id="phaseSelect">
+                    <option value="0">Pre-Launch</option>
+                    <option value="1">Launch & Ascent</option>
+                    <option value="2">Stage Separation</option>
+                    <option value="3">Boost-back Burn</option>
+                    <option value="4">Coast Phase</option>
+                    <option value="5">Re-entry Burn</option>
+                    <option value="6">Aerodynamic Descent</option>
+                    <option value="7">Landing Burn</option>
+                    <option value="8">Touchdown</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Camera Views:</label>
+                <div class="camera-buttons">
+                    <button class="btn btn-small" data-view="overview">Overview</button>
+                    <button class="btn btn-small" data-view="chase">Chase</button>
+                    <button class="btn btn-small" data-view="ground">Ground</button>
+                    <button class="btn btn-small" data-view="orbit">Orbital</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Panel -->
+        <div class="charts-panel">
+            <div class="chart-container">
+                <h3>Altitude Profile</h3>
+                <canvas id="altitudeChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Velocity Profile</h3>
+                <canvas id="velocityChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Fuel Consumption</h3>
+                <canvas id="fuelChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load external libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <!-- Load application scripts -->
+    <script src="{{ url_for('static', filename='js/simulation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/visualization.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
