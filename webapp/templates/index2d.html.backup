@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🚀 Falcon 9 Booster - 2D Simulation</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -188,9 +189,176 @@
             font-size: 12px;
             border-left: 3px solid #00ff88;
         }
+
+        .trajectory-graphs {
+            margin-top: 20px;
+        }
+
+        .trajectory-graphs h3 {
+            font-size: 14px;
+            color: #00d4ff;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .graph-container {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .graph-container canvas {
+            width: 100% !important;
+            height: auto !important;
+        }
+
+        /* Mobile Toggle Button */
+        #telemetryToggle {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00d4ff, #0096c7);
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 212, 255, 0.5);
+            transition: all 0.3s;
+        }
+
+        #telemetryToggle:hover {
+            transform: scale(1.1);
+        }
+
+        /* Mobile Responsive Design */
+        @media (max-width: 768px) {
+            #container {
+                flex-direction: column;
+            }
+
+            #telemetry-panel {
+                position: fixed;
+                top: 0;
+                right: -100%;
+                width: 100%;
+                height: 100vh;
+                z-index: 999;
+                transition: right 0.3s ease-in-out;
+                border-left: none;
+                border-top: 2px solid #00d4ff;
+            }
+
+            #telemetry-panel.active {
+                right: 0;
+            }
+
+            #telemetryToggle {
+                display: block;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+
+            .header p {
+                font-size: 11px;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            button {
+                padding: 14px;
+                font-size: 16px;
+            }
+
+            .telemetry-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .telemetry-value {
+                font-size: 18px;
+            }
+
+            .phase-name {
+                font-size: 16px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #telemetry-panel {
+                padding: 15px;
+            }
+
+            .telemetry-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .telemetry-value {
+                font-size: 16px;
+            }
+
+            .header h1 {
+                font-size: 18px;
+            }
+
+            .phase-name {
+                font-size: 14px;
+            }
+
+            button {
+                padding: 12px;
+                font-size: 14px;
+            }
+
+            #telemetryToggle {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+                bottom: 15px;
+                right: 15px;
+            }
+        }
+
+        /* Landscape mode on mobile */
+        @media (max-width: 896px) and (orientation: landscape) {
+            #telemetry-panel {
+                width: 300px;
+                right: -300px;
+            }
+
+            .telemetry-grid {
+                grid-template-columns: 1fr;
+                gap: 6px;
+            }
+
+            .telemetry-item {
+                padding: 8px;
+            }
+
+            .header {
+                padding: 10px;
+                margin-bottom: 10px;
+            }
+
+            .controls {
+                margin-bottom: 10px;
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- Mobile Telemetry Toggle Button -->
+    <button id="telemetryToggle" aria-label="Toggle Telemetry Panel">📊</button>
+
     <div id="container">
         <div id="canvas-container">
             <canvas id="simulationCanvas"></canvas>
@@ -247,9 +415,39 @@
                 <h3>Mission Events</h3>
                 <div id="eventsList"></div>
             </div>
+
+            <div class="trajectory-graphs">
+                <h3>Trajectory Graphs</h3>
+                <div class="graph-container">
+                    <canvas id="altitudeChart" width="300" height="150"></canvas>
+                </div>
+                <div class="graph-container">
+                    <canvas id="velocityChart" width="300" height="150"></canvas>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script src="/static/js/simulation2d.js"></script>
+        <script src="{{ url_for('static', filename='js/simulation2d.js') }}"></script>
+    <script>
+        // Mobile telemetry panel toggle
+        const telemetryToggle = document.getElementById('telemetryToggle');
+        const telemetryPanel = document.getElementById('telemetry-panel');
+        
+        telemetryToggle.addEventListener('click', () => {
+            telemetryPanel.classList.toggle('active');
+            telemetryToggle.textContent = telemetryPanel.classList.contains('active') ? '✖' : '📊';
+        });
+
+        // Close panel when clicking outside on mobile
+        document.getElementById('canvas-container').addEventListener('click', () => {
+            if (window.innerWidth <= 768 && telemetryPanel.classList.contains('active')) {
+                telemetryPanel.classList.remove('active');
+                telemetryToggle.textContent = '📊';
+            }
+        });
+    </script>
+</body>
+</html>
 </body>
 </html>
