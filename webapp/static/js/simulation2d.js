@@ -64,7 +64,12 @@ class Falcon9Simulation2D {
         
         this.currentPhase = 0;
         this.phaseStartTime = 0;
-        
+
+        // Sprite cross-fade transition state
+        this.previousPhase = 0;
+        this.spriteTransitionAlpha = 1.0;  // 1.0 = fully new sprite, 0.0 = fully old sprite
+        this.spriteTransitionDuration = 0.6; // seconds to cross-fade
+
         // Visual effects
         this.exhaustParticles = [];
         this.trajectory = [];
@@ -298,6 +303,8 @@ class Falcon9Simulation2D {
         this.maxQReached = false;
         this.maxQTime = 0;
         this._lastMach = 0;
+        this.previousPhase = 0;
+        this.spriteTransitionAlpha = 1.0;
 
         this.updateTelemetry();
         this.updateTrajectoryData();
@@ -352,7 +359,14 @@ class Falcon9Simulation2D {
         
         // Update phase
         this.updatePhase();
-        
+
+        // Advance sprite cross-fade transition
+        if (this.spriteTransitionAlpha < 1.0) {
+            this.spriteTransitionAlpha = Math.min(1.0,
+                this.spriteTransitionAlpha + dt / this.spriteTransitionDuration
+            );
+        }
+
         // Update physics
         if (this.stage1.active) {
             this.updateStage1Physics(dt);
@@ -402,6 +416,8 @@ class Falcon9Simulation2D {
         const phaseTime = this.time - this.phaseStartTime;
         
         if (phaseTime >= phase.duration && this.currentPhase < this.phases.length - 1) {
+            this.previousPhase = this.currentPhase; // remember for cross-fade
+            this.spriteTransitionAlpha = 0.0;       // start fade-in of new sprite
             this.currentPhase++;
             this.phaseStartTime = this.time;
             this.addEvent(`Phase: ${this.phases[this.currentPhase].name}`);
@@ -1049,32 +1065,34 @@ class Falcon9Simulation2D {
         
         const scale = this.camera.zoom;
         
-        // Choose sprite: phase-specific if available, otherwise use stage1/full
-        let sprite;
-        // Try to use phase-specific sprite if available (don't wait for all to load)
-        if (this.currentPhase <= 9) {
-            const phaseSprite = this.sprites[`rocket_phase${this.currentPhase}`];
-            if (phaseSprite && phaseSprite.complete && phaseSprite.naturalWidth > 0) {
-                sprite = phaseSprite;
-            } else {
-                // Fallback to default sprites
-                sprite = this.stage2.visible ? this.sprites.stage1 : this.sprites.full;
-            }
-        } else {
-            sprite = this.stage2.visible ? this.sprites.stage1 : this.sprites.full;
-        }
-        
-        // Scale sprite to match our rocket size (800 pixels height - 2x scale)
+        // Helper: get the best available sprite for a given phase index
+        const getSpriteForPhase = (phaseIdx) => {
+            const clamped = Math.max(0, Math.min(9, phaseIdx));
+            const ps = this.sprites[`rocket_phase${clamped}`];
+            if (ps && ps.complete && ps.naturalWidth > 0) return ps;
+            return this.stage2.visible ? this.sprites.stage1 : this.sprites.full;
+        };
+
+        const newSprite = getSpriteForPhase(this.currentPhase);
         const spriteHeight = 800 * scale;
-        const spriteWidth = (sprite.width / sprite.height) * spriteHeight;
-        
-        this.ctx.drawImage(
-            sprite,
-            -spriteWidth / 2,
-            -spriteHeight / 2,
-            spriteWidth,
-            spriteHeight
-        );
+        const spriteWidth  = (newSprite.width / newSprite.height) * spriteHeight;
+
+        if (this.spriteTransitionAlpha < 1.0 && this.previousPhase !== this.currentPhase) {
+            // Cross-fade: draw outgoing sprite at (1 - alpha) then incoming at alpha
+            const oldSprite = getSpriteForPhase(this.previousPhase);
+            const oldWidth  = (oldSprite.width / oldSprite.height) * spriteHeight;
+
+            this.ctx.globalAlpha = 1.0 - this.spriteTransitionAlpha;
+            this.ctx.drawImage(oldSprite, -oldWidth / 2, -spriteHeight / 2, oldWidth, spriteHeight);
+
+            this.ctx.globalAlpha = this.spriteTransitionAlpha;
+            this.ctx.drawImage(newSprite, -spriteWidth / 2, -spriteHeight / 2, spriteWidth, spriteHeight);
+
+            this.ctx.globalAlpha = 1.0; // restore
+        } else {
+            // No transition in progress — draw directly
+            this.ctx.drawImage(newSprite, -spriteWidth / 2, -spriteHeight / 2, spriteWidth, spriteHeight);
+        }
         
         this.ctx.restore();
     }
