@@ -646,7 +646,7 @@
             { phase: 4, timeInPhase: 2, text: 'BOOSTBACK BURN — Returning to launch site' },
             { phase: 6, timeInPhase: 0, text: 'ENTRY BURN — Decelerating for landing' },
             { phase: 8, timeInPhase: 0, text: 'LANDING BURN — Final approach' },
-            { phase: 9, timeInPhase: 0, text: 'TOUCHDOWN — Falcon 9 has landed!' },
+            { phase: 10, timeInPhase: 0, text: 'TOUCHDOWN — Falcon 9 has landed!' },
         ];
         const shownCallouts2d = new Set();
 
@@ -686,7 +686,8 @@
         let debriefShown = false;
 
         function maybeShowDebrief2d(sim) {
-            if (!debriefShown && !sim.isRunning && sim.currentPhase >= sim.phases.length - 2) {
+            // Only trigger on actual ground contact (phase 10), not on pause
+            if (!debriefShown && !sim.isRunning && sim.currentPhase >= 10 && sim.stage1.position.y <= 100) {
                 debriefShown = true;
                 const offset = Math.abs(sim.stage1.position.x - 100);
                 const speed = Math.abs(sim.stage1.velocity.y);

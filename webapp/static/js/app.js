@@ -32,7 +32,6 @@ document.addEventListener('DOMContentLoaded', () => {
         { phase: 4, timeInPhase: 2, text: 'BOOSTBACK BURN — Returning to landing zone' },
         { phase: 6, timeInPhase: 0, text: 'ENTRY BURN — Thermal protection initiated' },
         { phase: 8, timeInPhase: 0, text: 'LANDING BURN — LD-1 is the target' },
-        { phase: 9, timeInPhase: 0, text: 'TOUCHDOWN — Falcon 9 has landed!' },
     ];
     const shownCallouts = new Set();
 
@@ -154,9 +153,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Check mission callouts
             checkCallouts(telemetry);
 
-            // Detect simulation stopping (landing)
-            if (wasRunning && !simulation.isRunning && simulation.currentPhase >= 8) {
-                showLandingDebrief(simulation.getTelemetry());
+            // Detect actual touchdown (physics stopped the sim, rocket on ground)
+            if (wasRunning && !simulation.isRunning && simulation.currentPhase >= 8
+                    && simulation.position.y <= 50) {
+                showCallout('TOUCHDOWN — Falcon 9 has landed!');
+                addEventToLog('TOUCHDOWN — Falcon 9 has landed!', telemetry.time);
+                setTimeout(() => showLandingDebrief(simulation.getTelemetry()), 2000);
             }
             wasRunning = simulation.isRunning;
         } else {
