@@ -9,6 +9,8 @@ import sys
 import pandas as pd
 import json
 
+DEBUG = os.environ.get('FLASK_ENV') == 'development'
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -189,10 +191,10 @@ if __name__ == '__main__':
     print(f"Aircraft directory: {AIRCRAFT_DIR}")
     print("="*60)
     
-    # Run the Flask development server
+    # Run the Flask server
     app.run(
         host='0.0.0.0',
         port=5000,
-        debug=True,
-        use_reloader=True
+        debug=DEBUG,
+        use_reloader=DEBUG
     )

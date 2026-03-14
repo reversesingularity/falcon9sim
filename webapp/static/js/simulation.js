@@ -3,18 +3,18 @@
 class Falcon9Simulation {
     constructor() {
         // Physical constants
-        this.G = 9.80665; // m/s^2
-        this.EARTH_RADIUS = 6371000; // meters
-        
+        this.G = F9_CONSTANTS.G_SEA_LEVEL; // m/s^2
+        this.EARTH_RADIUS = F9_CONSTANTS.EARTH_RADIUS; // meters
+
         // Falcon 9 specifications (from JSBSim XML)
-        this.dryMass = 25400; // kg (56000 lbs)
-        this.fuelMass = 136078; // kg (RP-1)
-        this.oxidizerMass = 317515; // kg (LOX)
-        this.maxThrust = 7607000; // N (1,710,000 lbs * 9 engines at sea level)
-        this.isp = 311; // seconds (vacuum)
-        this.minThrottle = 0.4;
-        this.maxThrottle = 1.0;
-        
+        this.dryMass = F9_CONSTANTS.DRY_MASS; // kg (56000 lbs)
+        this.fuelMass = F9_CONSTANTS.FUEL_MASS; // kg (RP-1)
+        this.oxidizerMass = F9_CONSTANTS.OXIDIZER_MASS; // kg (LOX)
+        this.maxThrust = F9_CONSTANTS.MAX_THRUST; // N (1,710,000 lbs * 9 engines at sea level)
+        this.isp = F9_CONSTANTS.ISP_VACUUM; // seconds (vacuum)
+        this.minThrottle = F9_CONSTANTS.MIN_THROTTLE;
+        this.maxThrottle = F9_CONSTANTS.MAX_THROTTLE;
+
         // State variables (KSP coordinate system: Y is up)
         this.time = 0;
         this.position = { x: 0, y: 20, z: 0 }; // Start with center at 20m (rocket is 40m tall)
@@ -26,11 +26,17 @@ class Falcon9Simulation {
         this.fuelRemaining = this.fuelMass + this.oxidizerMass;
         this.throttle = 0;
         this.currentPhase = 0;
-        
+
+        // Max-Q tracking
+        this.maxDynPressure = 0;
+        this.maxQReached = false;
+        this.maxQTime = 0;
+        this._lastMach = 0;
+
         // Trajectory data
         this.trajectoryPoints = [];
-        this.maxTrajectoryPoints = 1000;
-        
+        this.maxTrajectoryPoints = F9_CONSTANTS.MAX_TRAJECTORY_POINTS;
+
         // Mission phases (KSP-style with realistic durations)
         this.phases = [
             { name: 'Pre-Launch', duration: 3, throttle: 0, targetPitch: 0 },
@@ -51,6 +57,30 @@ class Falcon9Simulation {
         this.downrangeDistance = 0;
     }
 
+    getGravity(altitude) {
+        const R = F9_CONSTANTS.EARTH_RADIUS;
+        return F9_CONSTANTS.G_SEA_LEVEL * Math.pow(R / (R + Math.max(0, altitude)), 2);
+    }
+
+    getIsp(altitude) {
+        // Linear interpolation between sea-level (282s) and vacuum (311s) ISP
+        // Transition happens in first ~100km
+        const t = Math.min(1.0, altitude / 100000);
+        return F9_CONSTANTS.ISP_SEA_LEVEL + t * (F9_CONSTANTS.ISP_VACUUM - F9_CONSTANTS.ISP_SEA_LEVEL);
+    }
+
+    getMachDrag(velocity, altitude) {
+        const temp = 288.15 - 0.0065 * Math.min(altitude, 11000); // ISA lapse rate
+        const speedOfSound = Math.sqrt(1.4 * 287.05 * Math.max(temp, 216.65));
+        const mach = velocity / speedOfSound;
+        this._lastMach = mach; // store for telemetry
+        if (mach < 0.8) return F9_CONSTANTS.CD_SUBSONIC;
+        if (mach < 1.0) return F9_CONSTANTS.CD_SUBSONIC + (F9_CONSTANTS.CD_TRANSONIC_PEAK - F9_CONSTANTS.CD_SUBSONIC) * ((mach - 0.8) / 0.2);
+        if (mach < 1.2) return F9_CONSTANTS.CD_TRANSONIC_PEAK - (F9_CONSTANTS.CD_TRANSONIC_PEAK - 0.72) * ((mach - 1.0) / 0.2);
+        if (mach < 3.0) return 0.72 - (0.72 - F9_CONSTANTS.CD_SUPERSONIC) * ((mach - 1.2) / 1.8);
+        return F9_CONSTANTS.CD_SUPERSONIC;
+    }
+
     reset() {
         this.time = 0;
         this.position = { x: 0, y: 20, z: 0 }; // Center of rocket at 20m
@@ -66,6 +96,10 @@ class Falcon9Simulation {
         this.trajectoryPoints = [];
         this.isRunning = false;
         this.downrangeDistance = 0;
+        this.maxDynPressure = 0;
+        this.maxQReached = false;
+        this.maxQTime = 0;
+        this._lastMach = 0;
     }
 
     start() {
@@ -215,9 +249,11 @@ class Falcon9Simulation {
         // Update rotation based on flight phase (smooth transitions)
         this.updateRotation(dt);
 
-        // Update mass (fuel consumption)
+        // Update mass (fuel consumption with variable ISP)
         if (this.throttle > 0 && this.fuelRemaining > 0) {
-            const fuelFlow = (this.maxThrust * this.throttle) / (this.isp * this.G);
+            const altitude = Math.max(0, this.position.y - 40);
+            const isp = this.getIsp(altitude);
+            const fuelFlow = (this.maxThrust * this.throttle) / (isp * F9_CONSTANTS.G_SEA_LEVEL);
             const fuelBurned = fuelFlow * dt;
             this.fuelRemaining = Math.max(0, this.fuelRemaining - fuelBurned);
             this.mass = this.dryMass + this.fuelRemaining;
@@ -259,13 +295,16 @@ class Falcon9Simulation {
     calculateForces() {
         const forces = { x: 0, y: 0, z: 0 };
 
-        // Gravity (always down)
-        forces.y -= this.mass * this.G;
+        const altitude = Math.max(0, this.position.y - 40); // Altitude above ground
+
+        // Altitude-dependent gravity
+        const g = this.getGravity(altitude);
+        forces.y -= this.mass * g;
 
         // Thrust (direction based on rotation - 0 pitch is straight up)
         if (this.throttle > 0 && this.fuelRemaining > 0) {
             const thrust = this.maxThrust * this.throttle;
-            
+
             // In KSP-style: 0° pitch = straight up (along +Y axis)
             // Pitch rotates in XY plane
             const thrustX = thrust * Math.sin(this.rotation.pitch);
@@ -277,21 +316,29 @@ class Falcon9Simulation {
             forces.z += thrustZ;
         }
 
-        // Simplified drag (proportional to velocity squared)
-        const altitude = Math.max(0, this.position.y - 40); // Altitude above ground
+        // Drag with Mach-dependent drag coefficient
         const density = this.getAirDensity(altitude);
         const velocityMag = Math.sqrt(
             this.velocity.x ** 2 + this.velocity.y ** 2 + this.velocity.z ** 2
         );
 
         if (velocityMag > 0.1) {
-            const dragCoeff = 0.35;
-            const referenceArea = 10.52; // m^2 (cross-sectional area)
-            const dragMag = 0.5 * density * velocityMag ** 2 * dragCoeff * referenceArea;
+            const dragCoeff = this.getMachDrag(velocityMag, altitude);
+            const referenceArea = F9_CONSTANTS.REF_AREA;
+            const dynPressure = 0.5 * density * velocityMag ** 2;
+            const dragMag = dynPressure * dragCoeff * referenceArea;
 
             forces.x -= (this.velocity.x / velocityMag) * dragMag;
             forces.y -= (this.velocity.y / velocityMag) * dragMag;
             forces.z -= (this.velocity.z / velocityMag) * dragMag;
+
+            // Max-Q tracking
+            if (dynPressure > this.maxDynPressure) {
+                this.maxDynPressure = dynPressure;
+            } else if (!this.maxQReached && dynPressure < this.maxDynPressure * 0.98 && this.maxDynPressure > 5000) {
+                this.maxQReached = true;
+                this.maxQTime = this.time;
+            }
         }
 
         return forces;
@@ -371,7 +418,13 @@ class Falcon9Simulation {
             dynPressure: dynPressure / 1000, // kPa
             phase: this.phases[this.currentPhase].name,
             position: this.position,
-            rotation: this.rotation
+            rotation: this.rotation,
+            mach: (this._lastMach || 0).toFixed(2),
+            maxQ: (this.maxDynPressure / 1000).toFixed(1), // kPa
+            maxQTime: this.maxQTime,
+            maxQReached: this.maxQReached,
+            landingOffset: this.position.y < 50 ? Math.sqrt(this.position.x ** 2 + this.position.z ** 2) : null,
+            landingSpeed: this.position.y < 50 ? Math.abs(this.velocity.y) : null,
         };
     }
 

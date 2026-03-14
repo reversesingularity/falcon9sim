@@ -5,13 +5,17 @@ class TelemetryCharts {
         this.altitudeChart = null;
         this.velocityChart = null;
         this.fuelChart = null;
-        
-        this.maxDataPoints = 200;
+        this.machChart = null;
+
+        this.maxDataPoints = F9_CONSTANTS.MAX_CHART_POINTS;
         this.timeData = [];
         this.altitudeData = [];
         this.velocityData = [];
         this.fuelData = [];
-        
+        this.machData = [];
+
+        this.frameCount = 0;
+
         this.init();
     }
 
@@ -19,6 +23,7 @@ class TelemetryCharts {
         this.createAltitudeChart();
         this.createVelocityChart();
         this.createFuelChart();
+        this.createMachChart();
     }
 
     createAltitudeChart() {
@@ -181,12 +186,59 @@ class TelemetryCharts {
         });
     }
 
-    update(telemetry) {
+    createMachChart() {
+        const el = document.getElementById('machChart');
+        if (!el) return;
+        const ctx = el.getContext('2d');
+        this.machChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: this.timeData,
+                datasets: [{
+                    label: 'Mach',
+                    data: this.machData,
+                    borderColor: '#ffa502',
+                    backgroundColor: 'rgba(255, 165, 2, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: {
+                        display: true,
+                        title: { display: true, text: 'Time (s)', color: '#8b92a7' },
+                        ticks: { color: '#8b92a7' },
+                        grid: { color: '#2d3748' }
+                    },
+                    y: {
+                        display: true,
+                        title: { display: true, text: 'Mach', color: '#8b92a7' },
+                        ticks: { color: '#8b92a7' },
+                        grid: { color: '#2d3748' },
+                        beginAtZero: true
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    update(telemetry, frameCount) {
+        // Only update at ~10Hz (every 6 frames)
+        if (frameCount !== undefined && frameCount % F9_CONSTANTS.CHART_UPDATE_INTERVAL !== 0) return;
+
         // Add new data point
         this.timeData.push(Math.round(telemetry.time));
         this.altitudeData.push((telemetry.altitude / 1000).toFixed(2)); // Convert to km
         this.velocityData.push(telemetry.velocity.toFixed(0));
         this.fuelData.push(telemetry.fuel.toFixed(1));
+        this.machData.push(parseFloat(telemetry.mach || 0));
 
         // Limit data points
         if (this.timeData.length > this.maxDataPoints) {
@@ -194,12 +246,14 @@ class TelemetryCharts {
             this.altitudeData.shift();
             this.velocityData.shift();
             this.fuelData.shift();
+            this.machData.shift();
         }
 
         // Update charts
         this.altitudeChart.update();
         this.velocityChart.update();
         this.fuelChart.update();
+        if (this.machChart) this.machChart.update();
     }
 
     reset() {
@@ -207,10 +261,12 @@ class TelemetryCharts {
         this.altitudeData = [];
         this.velocityData = [];
         this.fuelData = [];
+        this.machData = [];
 
         this.altitudeChart.update();
         this.velocityChart.update();
         this.fuelChart.update();
+        if (this.machChart) this.machChart.update();
     }
 }
 

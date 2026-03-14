@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 Falcon 9 Booster - 2D Simulation</title>
+    <title>🚀 Falcon 9 Booster - Live Simulation | Reverse Singularity</title>
+    <meta name="description" content="Interactive Falcon 9 booster landing simulation with realistic physics. Watch the booster launch, separate, and land autonomously.">
+    <meta property="og:title" content="Falcon 9 Booster Simulation">
+    <meta property="og:description" content="Interactive real-time Falcon 9 booster landing simulation">
+    <meta property="og:type" content="website">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
@@ -68,6 +72,7 @@
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
         button {
@@ -353,6 +358,149 @@
                 margin-bottom: 10px;
             }
         }
+
+        /* 2D Phase Timeline */
+        .phase-timeline-2d {
+            display: flex;
+            background: rgba(10,22,40,0.9);
+            border-bottom: 1px solid rgba(0,212,255,0.3);
+            overflow-x: auto;
+            padding: 6px 10px;
+            gap: 2px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+        }
+
+        .tl-step {
+            flex: 1;
+            min-width: 60px;
+            text-align: center;
+            font-size: 0.6rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            padding: 4px 4px;
+            border-radius: 4px;
+            color: rgba(255,255,255,0.3);
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .tl-step.active {
+            background: rgba(0,212,255,0.2);
+            color: #00d4ff;
+            border: 1px solid rgba(0,212,255,0.5);
+        }
+
+        .tl-step.completed {
+            color: #00ff88;
+        }
+
+        /* 2D Mission Callout */
+        .mission-callout-2d {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 8px;
+            border: 1px solid #00d4ff;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.4s;
+            pointer-events: none;
+            z-index: 100;
+            white-space: nowrap;
+        }
+
+        .mission-callout-2d.visible {
+            opacity: 1;
+        }
+
+        /* 2D Debrief Modal */
+        .debrief-modal-2d {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s;
+            backdrop-filter: blur(4px);
+        }
+
+        .debrief-modal-2d.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .debrief-card-2d {
+            background: rgba(10,22,40,0.98);
+            border: 2px solid #00d4ff;
+            border-radius: 16px;
+            padding: 2rem 2.5rem;
+            text-align: center;
+            min-width: 300px;
+            box-shadow: 0 8px 40px rgba(0,212,255,0.3);
+            color: white;
+        }
+
+        .debrief-card-2d h2 {
+            color: #00d4ff;
+            font-size: 1.3rem;
+            letter-spacing: 3px;
+            margin-bottom: 1rem;
+        }
+
+        .debrief-grade {
+            font-size: 3rem;
+            font-weight: 900;
+            letter-spacing: 4px;
+            margin-bottom: 0.4rem;
+            color: #00ff88;
+        }
+
+        .debrief-score {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: white;
+            font-family: 'Courier New', monospace;
+            margin-bottom: 1.5rem;
+        }
+
+        .debrief-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+
+        .debrief-stat label {
+            display: block;
+            font-size: 0.75rem;
+            color: #8b92a7;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        .debrief-stat span {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: white;
+            font-family: 'Courier New', monospace;
+        }
     </style>
 </head>
 <body>
@@ -362,8 +510,25 @@
     <div id="container">
         <div id="canvas-container">
             <canvas id="simulationCanvas"></canvas>
+
+            <!-- 2D Phase Timeline -->
+            <div class="phase-timeline-2d" id="phaseTimeline2d">
+                <div class="tl-step active" data-phase="0">PRE-LAUNCH</div>
+                <div class="tl-step" data-phase="1">ASCENT</div>
+                <div class="tl-step" data-phase="2">TURN</div>
+                <div class="tl-step" data-phase="3">SEP</div>
+                <div class="tl-step" data-phase="4">BOOST-BACK</div>
+                <div class="tl-step" data-phase="5">COAST</div>
+                <div class="tl-step" data-phase="6">RE-ENTRY</div>
+                <div class="tl-step" data-phase="7">DESCENT</div>
+                <div class="tl-step" data-phase="8">LANDING</div>
+                <div class="tl-step" data-phase="9">LANDED</div>
+            </div>
+
+            <!-- 2D Mission Callout -->
+            <div id="missionCallout" class="mission-callout-2d"></div>
         </div>
-        
+
         <div id="telemetry-panel">
             <div class="header">
                 <h1>🚀 FALCON 9</h1>
@@ -373,6 +538,7 @@
             <div class="controls">
                 <button id="playBtn">▶ PLAY</button>
                 <button id="resetBtn">↻ RESET</button>
+                <button id="unitToggle" style="flex:1;padding:12px;border:2px solid #00d4ff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;background:transparent;color:#00d4ff;transition:all 0.3s;">METRIC</button>
             </div>
 
             <div class="phase-indicator">
@@ -404,6 +570,14 @@
                     <div class="telemetry-label">Throttle</div>
                     <div class="telemetry-value" id="throttle">0%</div>
                 </div>
+                <div class="telemetry-item">
+                    <div class="telemetry-label">Mach</div>
+                    <div class="telemetry-value" id="mach">M0.00</div>
+                </div>
+                <div class="telemetry-item">
+                    <div class="telemetry-label">G-Force</div>
+                    <div class="telemetry-value" id="gforce">0.0g</div>
+                </div>
             </div>
 
             <div class="speed-control">
@@ -428,12 +602,30 @@
         </div>
     </div>
 
+    <!-- Landing Debrief Modal -->
+    <div id="debriefModal" class="debrief-modal-2d">
+        <div class="debrief-card-2d">
+            <h2>MISSION DEBRIEF</h2>
+            <div class="debrief-grade" id="debriefGrade">NOMINAL</div>
+            <div class="debrief-score" id="debriefScore">85/100</div>
+            <div class="debrief-stats">
+                <div class="debrief-stat"><label>Landing Offset</label><span id="debriefOffset">0.0 m</span></div>
+                <div class="debrief-stat"><label>Landing Speed</label><span id="debriefSpeed">0.00 m/s</span></div>
+                <div class="debrief-stat"><label>Fuel Remaining</label><span id="debriefFuel">0.0%</span></div>
+                <div class="debrief-stat"><label>Mission Time</label><span id="debriefTime">T+00:00</span></div>
+            </div>
+            <button onclick="document.getElementById('debriefModal').classList.remove('visible'); document.getElementById('resetBtn').click();" style="padding:12px 24px;background:linear-gradient(135deg,#00d4ff,#0096c7);border:none;border-radius:8px;color:white;font-weight:bold;cursor:pointer;font-size:16px;">FLY AGAIN</button>
+        </div>
+    </div>
+
+    <!-- Load constants first, then simulation -->
+    <script src="js/constants.js"></script>
     <script src="js/simulation2d.js"></script>
     <script>
         // Mobile telemetry panel toggle
         const telemetryToggle = document.getElementById('telemetryToggle');
         const telemetryPanel = document.getElementById('telemetry-panel');
-        
+
         telemetryToggle.addEventListener('click', () => {
             telemetryPanel.classList.toggle('active');
             telemetryToggle.textContent = telemetryPanel.classList.contains('active') ? '✖' : '📊';
@@ -446,6 +638,143 @@
                 telemetryToggle.textContent = '📊';
             }
         });
+
+        // ── Mission callouts for 2D ──────────────────────────────────────
+        const CALLOUTS_2D = [
+            { phase: 1, timeInPhase: 5, text: 'LIFTOFF — Falcon 9 has cleared the tower' },
+            { phase: 3, timeInPhase: 0, text: 'STAGE SEPARATION — Booster sep confirmed' },
+            { phase: 4, timeInPhase: 2, text: 'BOOSTBACK BURN — Returning to launch site' },
+            { phase: 6, timeInPhase: 0, text: 'ENTRY BURN — Decelerating for landing' },
+            { phase: 8, timeInPhase: 0, text: 'LANDING BURN — Final approach' },
+            { phase: 9, timeInPhase: 0, text: 'TOUCHDOWN — Falcon 9 has landed!' },
+        ];
+        const shownCallouts2d = new Set();
+
+        function checkCallouts2d(sim) {
+            const phaseTime = sim.time - sim.phaseStartTime;
+            CALLOUTS_2D.forEach(c => {
+                const key = `${c.phase}-${c.timeInPhase}`;
+                if (!shownCallouts2d.has(key) && sim.currentPhase === c.phase && phaseTime >= c.timeInPhase) {
+                    shownCallouts2d.add(key);
+                    const el = document.getElementById('missionCallout');
+                    if (el) {
+                        el.textContent = c.text;
+                        el.classList.add('visible');
+                        setTimeout(() => el.classList.remove('visible'), 4000);
+                    }
+                }
+            });
+        }
+
+        // ── Unit toggle ──────────────────────────────────────────────────
+        let useImperial2d = false;
+        document.getElementById('unitToggle').addEventListener('click', function() {
+            useImperial2d = !useImperial2d;
+            this.textContent = useImperial2d ? 'IMPERIAL' : 'METRIC';
+        });
+
+        // ── Phase timeline updater ────────────────────────────────────────
+        function updateTimeline2d(phase) {
+            document.querySelectorAll('.tl-step').forEach((s, i) => {
+                s.classList.remove('active', 'completed');
+                if (i < phase) s.classList.add('completed');
+                else if (i === phase) s.classList.add('active');
+            });
+        }
+
+        // ── Landing debrief ───────────────────────────────────────────────
+        let debriefShown = false;
+
+        function maybeShowDebrief2d(sim) {
+            if (!debriefShown && !sim.isRunning && sim.currentPhase >= sim.phases.length - 2) {
+                debriefShown = true;
+                const offset = Math.abs(sim.stage1.position.x - 100);
+                const speed = Math.abs(sim.stage1.velocity.y);
+                const fuel = (sim.stage1.fuel / sim.fuelMass) * 100;
+                let score = 100;
+                if (offset > 50) score -= 20; else if (offset > 10) score -= 10;
+                if (speed > 5) score -= 30; else if (speed > 2) score -= 10;
+                if (fuel < 5) score -= 10;
+                score = Math.max(0, score);
+                const grade = score >= 90 ? 'PERFECT' : score >= 70 ? 'NOMINAL' : score >= 50 ? 'MARGINAL' : 'FAILED';
+                const gradeColor = score >= 90 ? '#00ff88' : score >= 70 ? '#00d4ff' : score >= 50 ? '#ffa502' : '#ff4757';
+
+                const gradeEl = document.getElementById('debriefGrade');
+                if (gradeEl) { gradeEl.textContent = grade; gradeEl.style.color = gradeColor; }
+                const scoreEl = document.getElementById('debriefScore');
+                if (scoreEl) scoreEl.textContent = score + '/100';
+                const offsetEl = document.getElementById('debriefOffset');
+                if (offsetEl) offsetEl.textContent = offset.toFixed(1) + ' m';
+                const speedEl = document.getElementById('debriefSpeed');
+                if (speedEl) speedEl.textContent = speed.toFixed(2) + ' m/s';
+                const fuelEl = document.getElementById('debriefFuel');
+                if (fuelEl) fuelEl.textContent = fuel.toFixed(1) + '%';
+                const t = sim.time;
+                const timeEl = document.getElementById('debriefTime');
+                if (timeEl) timeEl.textContent = 'T+' + Math.floor(t / 60).toString().padStart(2, '0') + ':' + Math.floor(t % 60).toString().padStart(2, '0');
+                document.getElementById('debriefModal').classList.add('visible');
+            }
+        }
+
+        // ── Hook into the simulation update loop ──────────────────────────
+        // Override the animation loop to add our hooks AFTER the simulation initializes
+        const _origRAF = window.requestAnimationFrame.bind(window);
+        let _hooked = false;
+
+        function hookIntoSim() {
+            if (_hooked || !window.sim2d) return;
+            _hooked = true;
+
+            // Store original update
+            const _origUpdate = window.sim2d.update.bind(window.sim2d);
+            window.sim2d.update = function(deltaTime) {
+                _origUpdate(deltaTime);
+                const sim = window.sim2d;
+
+                // Update phase timeline
+                updateTimeline2d(sim.currentPhase);
+
+                // Unit display override (overwrite what updateTelemetry wrote)
+                if (useImperial2d) {
+                    const altEl = document.getElementById('altitude');
+                    if (altEl) {
+                        const altKm = sim.stage1.position.y / 1000;
+                        altEl.textContent = (altKm * 0.621371).toFixed(2) + ' mi';
+                    }
+                    const velEl = document.getElementById('velocity');
+                    if (velEl) {
+                        const vel = Math.hypot(sim.stage1.velocity.x, sim.stage1.velocity.y);
+                        velEl.textContent = (vel * 2.23694).toFixed(0) + ' mph';
+                    }
+                }
+
+                // Mission callouts
+                if (sim.isRunning) {
+                    checkCallouts2d(sim);
+                }
+
+                // Landing debrief
+                maybeShowDebrief2d(sim);
+            };
+
+            // Hook reset to clear debrief state
+            const _origReset = window.sim2d.reset.bind(window.sim2d);
+            window.sim2d.reset = function() {
+                _origReset();
+                debriefShown = false;
+                shownCallouts2d.clear();
+                updateTimeline2d(0);
+                document.getElementById('debriefModal').classList.remove('visible');
+            };
+        }
+
+        // Poll until sim2d is available (it's set in DOMContentLoaded of simulation2d.js)
+        const hookInterval = setInterval(() => {
+            if (window.sim2d) {
+                hookIntoSim();
+                clearInterval(hookInterval);
+            }
+        }, 100);
     </script>
 </body>
 </html>

@@ -14,6 +14,20 @@
             <p>Launch → Orbital Re-entry → Soft Landing</p>
         </header>
 
+        <!-- Phase Timeline -->
+        <div class="phase-timeline">
+            <div class="timeline-step" data-phase="0"><span class="step-dot"></span><span class="step-label">Pre-Launch</span></div>
+            <div class="timeline-step" data-phase="1"><span class="step-dot"></span><span class="step-label">Ascent</span></div>
+            <div class="timeline-step" data-phase="2"><span class="step-dot"></span><span class="step-label">Gravity Turn</span></div>
+            <div class="timeline-step" data-phase="3"><span class="step-dot"></span><span class="step-label">Stage Sep</span></div>
+            <div class="timeline-step" data-phase="4"><span class="step-dot"></span><span class="step-label">Boost-back</span></div>
+            <div class="timeline-step" data-phase="5"><span class="step-dot"></span><span class="step-label">Coast</span></div>
+            <div class="timeline-step" data-phase="6"><span class="step-dot"></span><span class="step-label">Re-entry</span></div>
+            <div class="timeline-step" data-phase="7"><span class="step-dot"></span><span class="step-label">Descent</span></div>
+            <div class="timeline-step" data-phase="8"><span class="step-dot"></span><span class="step-label">Landing Burn</span></div>
+            <div class="timeline-step" data-phase="9"><span class="step-dot"></span><span class="step-label">Touchdown</span></div>
+        </div>
+
         <!-- Main Content -->
         <div class="main-content">
             <!-- 3D Visualization -->
@@ -22,12 +36,13 @@
                 <div class="phase-indicator" id="phaseIndicator">
                     <span class="phase-text">INITIALIZING</span>
                 </div>
+                <div id="missionCallout" class="mission-callout"></div>
             </div>
 
             <!-- Telemetry Panel -->
             <div class="telemetry-panel">
                 <h2>📊 Telemetry Data</h2>
-                
+
                 <div class="telemetry-grid">
                     <!-- Time -->
                     <div class="telemetry-item">
@@ -45,6 +60,12 @@
                     <div class="telemetry-item highlight">
                         <label>Velocity</label>
                         <span id="velocity" class="value">0 m/s</span>
+                    </div>
+
+                    <!-- Mach -->
+                    <div class="telemetry-item">
+                        <label>Mach</label>
+                        <span id="mach" class="value">M0.00</span>
                     </div>
 
                     <!-- Vertical Speed -->
@@ -111,8 +132,8 @@
                     </div>
 
                     <!-- Dynamic Pressure -->
-                    <div class="telemetry-item">
-                        <label>Dynamic Pressure</label>
+                    <div class="telemetry-item" id="dynPressureItem">
+                        <label>Dynamic Pressure <span id="maxQBadge" class="maxq-badge" style="display:none">MAX-Q</span></label>
                         <span id="dynPressure" class="value">0 kPa</span>
                     </div>
                 </div>
@@ -130,6 +151,7 @@
             <div class="control-group">
                 <button id="playPauseBtn" class="btn btn-primary">▶ Play</button>
                 <button id="resetBtn" class="btn btn-secondary">↻ Reset</button>
+                <button id="unitToggle" class="btn btn-secondary btn-small">Switch to Imperial</button>
             </div>
 
             <div class="control-group">
@@ -156,11 +178,12 @@
             <div class="control-group">
                 <label>Camera Views:</label>
                 <div class="camera-buttons">
-                    <button class="btn btn-small" data-view="overview">Overview</button>
-                    <button class="btn btn-small" data-view="chase">Chase</button>
-                    <button class="btn btn-small" data-view="ground">Ground</button>
-                    <button class="btn btn-small" data-view="orbit">Orbital</button>
+                    <button class="btn btn-small" data-view="overview">Wide View [1]</button>
+                    <button class="btn btn-small" data-view="chase">Chase Cam [2]</button>
+                    <button class="btn btn-small" data-view="ground">Ground View [3]</button>
+                    <button class="btn btn-small" data-view="orbital">Orbital [4]</button>
                 </div>
+                <small style="color: var(--text-secondary); display: block; margin-top: 0.3rem;">Space: play/pause · R: reset · 1-4: camera</small>
             </div>
         </div>
 
@@ -178,14 +201,35 @@
                 <h3>Fuel Consumption</h3>
                 <canvas id="fuelChart"></canvas>
             </div>
+            <div class="chart-container">
+                <h3>Mach Number</h3>
+                <canvas id="machChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Landing Debrief Modal -->
+        <div id="debriefModal" class="debrief-modal">
+            <div class="debrief-card">
+                <h2>MISSION DEBRIEF</h2>
+                <div class="debrief-grade" id="debriefGrade">NOMINAL</div>
+                <div class="debrief-score" id="debriefScore">85/100</div>
+                <div class="debrief-stats">
+                    <div class="debrief-stat"><label>Landing Offset</label><span id="debriefOffset">0.0 m</span></div>
+                    <div class="debrief-stat"><label>Landing Speed</label><span id="debriefSpeed">0.00 m/s</span></div>
+                    <div class="debrief-stat"><label>Fuel Remaining</label><span id="debriefFuel">0.0%</span></div>
+                    <div class="debrief-stat"><label>Mission Time</label><span id="debriefTime">T+00:00</span></div>
+                </div>
+                <button class="btn btn-primary" onclick="document.getElementById('debriefModal').classList.remove('visible'); document.getElementById('resetBtn').click();">FLY AGAIN</button>
+            </div>
         </div>
     </div>
 
     <!-- Load external libraries -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-    
-    <!-- Load application scripts -->
+
+    <!-- Load application scripts - constants MUST be first -->
+    <script src="{{ url_for('static', filename='js/constants.js') }}"></script>
     <script src="{{ url_for('static', filename='js/simulation.js') }}"></script>
     <script src="{{ url_for('static', filename='js/visualization.js') }}"></script>
     <script src="{{ url_for('static', filename='js/charts.js') }}"></script>

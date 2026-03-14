@@ -9,13 +9,19 @@ class Falcon9Simulation2D {
         window.addEventListener('resize', () => this.resizeCanvas());
 
         // Physics constants
-        this.G = 9.80665; // m/s²
-        
+        this.G = F9_CONSTANTS.G_SEA_LEVEL; // m/s²
+
         // Rocket specifications
-        this.dryMass = 25400; // kg
-        this.fuelMass = 453593; // kg (RP-1 + LOX)
-        this.maxThrust = 7607000; // N
-        this.isp = 311; // seconds
+        this.dryMass = F9_CONSTANTS.DRY_MASS; // kg
+        this.fuelMass = 453593; // kg (RP-1 + LOX combined for 2D sim)
+        this.maxThrust = F9_CONSTANTS.MAX_THRUST; // N
+        this.isp = F9_CONSTANTS.ISP_VACUUM; // seconds
+
+        // Max-Q tracking
+        this.maxDynPressure = 0;
+        this.maxQReached = false;
+        this.maxQTime = 0;
+        this._lastMach = 0;
         
         // Simulation state
         this.time = 0;
@@ -102,23 +108,23 @@ class Falcon9Simulation2D {
             phaseRocketsLoaded: false
         };
         
-        this.sprites.full.src = 'images/falcon9_full.png';
-        this.sprites.stage1.src = 'images/falcon9_stage1.png';
-        this.sprites.stage2.src = 'images/falcon9_stage2.png';
-        this.sprites.launchpad.src = 'images/launchpad.jpg';
-        this.sprites.landingpad.src = 'images/landingpad.jpg';
+        this.sprites.full.src = '/static/images/falcon9_full.png';
+        this.sprites.stage1.src = '/static/images/falcon9_stage1.png';
+        this.sprites.stage2.src = '/static/images/falcon9_stage2.png';
+        this.sprites.launchpad.src = '/static/images/launchpad.jpg';
+        this.sprites.landingpad.src = '/static/images/landingpad.jpg';
         
         // Phase-specific rocket sprites
-        this.sprites.rocket_phase0.src = 'images/falcon9_phase0.png';
-        this.sprites.rocket_phase1.src = 'images/falcon9_phase1.png';
-        this.sprites.rocket_phase2.src = 'images/falcon9_phase2.png';
-        this.sprites.rocket_phase3.src = 'images/falcon9_phase3.png';
-        this.sprites.rocket_phase4.src = 'images/falcon9_phase4.png';
-        this.sprites.rocket_phase5.src = 'images/falcon9_phase5.png';
-        this.sprites.rocket_phase6.src = 'images/falcon9_phase6.png';
-        this.sprites.rocket_phase7.src = 'images/falcon9_phase7.png';
-        this.sprites.rocket_phase8.src = 'images/falcon9_phase8.png';
-        this.sprites.rocket_phase9.src = 'images/falcon9_phase9.png';
+        this.sprites.rocket_phase0.src = '/static/images/falcon9_phase0.png';
+        this.sprites.rocket_phase1.src = '/static/images/falcon9_phase1.png';
+        this.sprites.rocket_phase2.src = '/static/images/falcon9_phase2.png';
+        this.sprites.rocket_phase3.src = '/static/images/falcon9_phase3.png';
+        this.sprites.rocket_phase4.src = '/static/images/falcon9_phase4.png';
+        this.sprites.rocket_phase5.src = '/static/images/falcon9_phase5.png';
+        this.sprites.rocket_phase6.src = '/static/images/falcon9_phase6.png';
+        this.sprites.rocket_phase7.src = '/static/images/falcon9_phase7.png';
+        this.sprites.rocket_phase8.src = '/static/images/falcon9_phase8.png';
+        this.sprites.rocket_phase9.src = '/static/images/falcon9_phase9.png';
         
         // Wait for all images to load
         let loadedCount = 0;
@@ -192,6 +198,28 @@ class Falcon9Simulation2D {
         };
     }
     
+    getGravity(altitude) {
+        const R = F9_CONSTANTS.EARTH_RADIUS;
+        return F9_CONSTANTS.G_SEA_LEVEL * Math.pow(R / (R + Math.max(0, altitude)), 2);
+    }
+
+    getIsp(altitude) {
+        const t = Math.min(1.0, altitude / 100000);
+        return F9_CONSTANTS.ISP_SEA_LEVEL + t * (F9_CONSTANTS.ISP_VACUUM - F9_CONSTANTS.ISP_SEA_LEVEL);
+    }
+
+    getMachDrag(velocity, altitude) {
+        const temp = 288.15 - 0.0065 * Math.min(altitude, 11000);
+        const speedOfSound = Math.sqrt(1.4 * 287.05 * Math.max(temp, 216.65));
+        const mach = velocity / speedOfSound;
+        this._lastMach = mach;
+        if (mach < 0.8) return F9_CONSTANTS.CD_SUBSONIC;
+        if (mach < 1.0) return F9_CONSTANTS.CD_SUBSONIC + (F9_CONSTANTS.CD_TRANSONIC_PEAK - F9_CONSTANTS.CD_SUBSONIC) * ((mach - 0.8) / 0.2);
+        if (mach < 1.2) return F9_CONSTANTS.CD_TRANSONIC_PEAK - (F9_CONSTANTS.CD_TRANSONIC_PEAK - 0.72) * ((mach - 1.0) / 0.2);
+        if (mach < 3.0) return 0.72 - (0.72 - F9_CONSTANTS.CD_SUPERSONIC) * ((mach - 1.2) / 1.8);
+        return F9_CONSTANTS.CD_SUPERSONIC;
+    }
+
     resizeCanvas() {
         this.canvas.width = this.canvas.offsetWidth;
         this.canvas.height = this.canvas.offsetHeight;
@@ -266,6 +294,11 @@ class Falcon9Simulation2D {
             maxPoints: 100
         };
         
+        this.maxDynPressure = 0;
+        this.maxQReached = false;
+        this.maxQTime = 0;
+        this._lastMach = 0;
+
         this.updateTelemetry();
         this.updateTrajectoryData();
     }
@@ -346,11 +379,11 @@ class Falcon9Simulation2D {
         trajectoryX = this.stage1.position.x - Math.sin(this.stage1.angle) * 400;
         trajectoryY = this.stage1.position.y - Math.cos(this.stage1.angle) * 400;
         
-        if (this.trajectory.length === 0 || 
+        if (this.trajectory.length === 0 ||
             Math.hypot(trajectoryX - this.trajectory[this.trajectory.length - 1].x,
                       trajectoryY - this.trajectory[this.trajectory.length - 1].y) > 500) {
             this.trajectory.push({ x: trajectoryX, y: trajectoryY });
-            if (this.trajectory.length > 200) {
+            if (this.trajectory.length > F9_CONSTANTS.MAX_TRAJECTORY_POINTS) {
                 this.trajectory.shift();
             }
         }
@@ -426,26 +459,37 @@ class Falcon9Simulation2D {
         
         // Calculate forces
         let thrust = this.maxThrust * dynamicThrottle;
-        
+
         // Thrust vector based on angle
         const thrustX = thrust * Math.sin(this.stage1.angle);
         const thrustY = thrust * Math.cos(this.stage1.angle);
-        
-        // Gravity
-        const gravityY = -this.stage1.mass * this.G;
-        
-        // Drag (simplified)
+
+        // Altitude-dependent gravity
         const altitude = this.stage1.position.y;
-        const density = Math.max(0, 1.225 * Math.exp(-altitude / 8500));
+        const g = this.getGravity(altitude);
+        const gravityY = -this.stage1.mass * g;
+
+        // Mach-dependent drag
+        const density = Math.max(0, F9_CONSTANTS.SEA_LEVEL_DENSITY * Math.exp(-altitude / F9_CONSTANTS.SCALE_HEIGHT));
         const velocity = Math.hypot(this.stage1.velocity.x, this.stage1.velocity.y);
-        const dragForce = 0.5 * density * velocity * velocity * 10; // Simplified drag
+        const dragCoeff = velocity > 0.1 ? this.getMachDrag(velocity, altitude) : F9_CONSTANTS.CD_SUBSONIC;
+        const dynPressure = 0.5 * density * velocity * velocity;
+        const dragForce = dynPressure * dragCoeff * F9_CONSTANTS.REF_AREA;
         const dragX = velocity > 0 ? -dragForce * (this.stage1.velocity.x / velocity) : 0;
         const dragY = velocity > 0 ? -dragForce * (this.stage1.velocity.y / velocity) : 0;
-        
+
+        // Max-Q tracking
+        if (dynPressure > this.maxDynPressure) {
+            this.maxDynPressure = dynPressure;
+        } else if (!this.maxQReached && dynPressure < this.maxDynPressure * 0.98 && this.maxDynPressure > 5000) {
+            this.maxQReached = true;
+            this.maxQTime = this.time;
+        }
+
         // Total forces
         const totalForceX = thrustX + dragX;
         const totalForceY = thrustY + gravityY + dragY;
-        
+
         // Acceleration
         const accelX = totalForceX / this.stage1.mass;
         const accelY = totalForceY / this.stage1.mass;
@@ -510,9 +554,10 @@ class Falcon9Simulation2D {
             return;
         }
         
-        // Fuel consumption
+        // Fuel consumption with variable ISP
         if (this.stage1.throttle > 0 && this.stage1.fuel > 0) {
-            const fuelRate = (this.maxThrust / (this.isp * this.G)) * this.stage1.throttle;
+            const isp = this.getIsp(this.stage1.position.y);
+            const fuelRate = (this.maxThrust / (isp * F9_CONSTANTS.G_SEA_LEVEL)) * this.stage1.throttle;
             this.stage1.fuel -= fuelRate * dt;
             this.stage1.fuel = Math.max(0, this.stage1.fuel);
             this.stage1.mass = this.dryMass + this.stage1.fuel;
@@ -1330,27 +1375,57 @@ class Falcon9Simulation2D {
     updateTelemetry() {
         const mins = Math.floor(this.time / 60);
         const secs = Math.floor(this.time % 60);
-        document.getElementById('missionTime').textContent = 
+        document.getElementById('missionTime').textContent =
             `T+${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        
-        document.getElementById('altitude').textContent = 
+
+        document.getElementById('altitude').textContent =
             (this.stage1.position.y / 1000).toFixed(2) + ' km';
-        
+
         const velocity = Math.hypot(this.stage1.velocity.x, this.stage1.velocity.y);
-        document.getElementById('velocity').textContent = 
+        document.getElementById('velocity').textContent =
             velocity.toFixed(0) + ' m/s';
-        
-        document.getElementById('verticalSpeed').textContent = 
+
+        document.getElementById('verticalSpeed').textContent =
             this.stage1.velocity.y.toFixed(0) + ' m/s';
-        
+
         const fuelPercent = (this.stage1.fuel / this.fuelMass) * 100;
         document.getElementById('fuel').textContent = fuelPercent.toFixed(1) + '%';
-        
-        document.getElementById('throttle').textContent = 
+
+        document.getElementById('throttle').textContent =
             (this.stage1.throttle * 100).toFixed(0) + '%';
-        
-        document.getElementById('phaseName').textContent = 
+
+        document.getElementById('phaseName').textContent =
             this.phases[this.currentPhase].name;
+
+        // New telemetry fields
+        const machEl = document.getElementById('mach');
+        if (machEl) machEl.textContent = 'M' + (this._lastMach || 0).toFixed(2);
+
+        const gforceEl = document.getElementById('gforce');
+        if (gforceEl) {
+            const gForce = velocity / F9_CONSTANTS.G_SEA_LEVEL;
+            gforceEl.textContent = gForce.toFixed(1) + 'g';
+        }
+    }
+
+    getTelemetry() {
+        const velocity = Math.hypot(this.stage1.velocity.x, this.stage1.velocity.y);
+        const fuelPercent = (this.stage1.fuel / this.fuelMass) * 100;
+        return {
+            time: this.time,
+            altitude: this.stage1.position.y,
+            velocity: velocity,
+            verticalSpeed: this.stage1.velocity.y,
+            fuel: fuelPercent,
+            throttle: this.stage1.throttle * 100,
+            phase: this.phases[this.currentPhase].name,
+            mach: (this._lastMach || 0).toFixed(2),
+            maxQ: (this.maxDynPressure / 1000).toFixed(1),
+            maxQReached: this.maxQReached,
+            maxQTime: this.maxQTime,
+            landingOffset: this.stage1.position.y < 50 ? Math.abs(this.stage1.position.x - 100) : null,
+            landingSpeed: this.stage1.position.y < 50 ? Math.abs(this.stage1.velocity.y) : null,
+        };
     }
     
     addEvent(message) {
@@ -1369,6 +1444,8 @@ class Falcon9Simulation2D {
 // Initialize
 let simulation;
 let lastTime = null;
+// Global reference for external scripts
+window.sim2d = null;
 
 function animate(currentTime) {
     if (lastTime === null) {
@@ -1390,6 +1467,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('simulationCanvas');
     console.log('Canvas element:', canvas);
     simulation = new Falcon9Simulation2D(canvas);
+    window.sim2d = simulation; // Expose globally for external scripts
     console.log('Simulation created');
     
     document.getElementById('playBtn').addEventListener('click', () => {

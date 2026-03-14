@@ -89,8 +89,16 @@ class Visualization {
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+        // WebGL2 detection
+        if (!this.renderer.capabilities.isWebGL2) {
+            console.warn('WebGL2 not available, falling back to 2D simulation');
+            window.location.href = '/';
+            return;
+        }
+
         // Simple manual controls
         this.setupMouseControls();
+        this.setupTouchControls();
 
         // Lights
         this.setupLights();
@@ -145,6 +153,25 @@ class Visualization {
         });
     }
 
+    setupTouchControls() {
+        let lastTouch = null;
+        this.canvas.addEventListener('touchstart', (e) => {
+            lastTouch = e.touches[0];
+        });
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 1 && lastTouch) {
+                const dx = e.touches[0].clientX - lastTouch.clientX;
+                const dy = e.touches[0].clientY - lastTouch.clientY;
+                this.targetRotationY += dx * 0.005;
+                this.targetRotationX += dy * 0.005;
+                this.targetRotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.targetRotationX));
+                lastTouch = e.touches[0];
+            }
+        }, { passive: false });
+        this.canvas.addEventListener('touchend', () => { lastTouch = null; });
+    }
+
     setupLights() {
         // Ambient light - subtle space ambience
         const ambientLight = new THREE.AmbientLight(0x1a1a2e, 0.3);
@@ -154,8 +181,8 @@ class Visualization {
         const sunLight = new THREE.DirectionalLight(0xfff5e6, 2.0);
         sunLight.position.set(1000, 1500, 800);
         sunLight.castShadow = true;
-        sunLight.shadow.mapSize.width = 4096;
-        sunLight.shadow.mapSize.height = 4096;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
         sunLight.shadow.camera.near = 0.5;
         sunLight.shadow.camera.far = 8000;
         sunLight.shadow.camera.left = -500;
